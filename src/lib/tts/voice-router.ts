@@ -165,7 +165,8 @@ export function buildRouterContext(
   return {
     userId,
     hasPremiumFlag:         !!(env.ELEVENLABS_API_KEY && env._PREMIUM_USERS?.includes(userId)),
-    elevenlabsKeyAvailable: !!(env.ELEVENLABS_API_KEY),
+    // elevenlabsKeyAvailable = true if EITHER direct EL key OR Replicate key is set
+    elevenlabsKeyAvailable: !!(env.ELEVENLABS_API_KEY || env.REPLICATE_API_KEY),
     openaiKeyAvailable:     !!(env.OPENAI_API_KEY),
     pollyAvailable:         !!(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY),
     db,

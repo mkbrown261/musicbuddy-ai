@@ -15,6 +15,8 @@ export type Bindings = {
   AWS_ACCESS_KEY_ID:     string;
   AWS_SECRET_ACCESS_KEY: string;
   AWS_REGION:            string;
+  // Groq (real-time cognitive layer)
+  GROQ_API_KEY:          string;
 };
 
 // ── Database Models ──────────────────────────────────────────

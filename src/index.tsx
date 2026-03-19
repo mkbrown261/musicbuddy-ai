@@ -21,6 +21,7 @@ import { billing } from './routes/billing'
 import { intentRoute } from './routes/intent'
 import { auth } from './routes/auth'
 import { tts } from './routes/tts'
+import { groq } from './routes/groq'
 
 // Bootstrap all Intent Layer modules (runs once at edge startup)
 import { bootstrapModules } from './lib/modules/index'
@@ -50,6 +51,7 @@ app.route('/api/billing', billing)
 app.route('/api/intent', intentRoute)
 app.route('/api/auth', auth)
 app.route('/api/tts', tts)
+app.route('/api/groq', groq)
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (c) => {
@@ -728,12 +730,19 @@ function getMainHTML(): string {
           <div class="camera-feed h-52 flex items-center justify-center relative" id="cameraFeed">
             <div class="scan-line" id="scanLine" style="display:none"></div>
             <div id="gazeIndicator" class="gaze-dot" style="display:none; left:50%; top:50%"></div>
-            <div id="cameraPlaceholder" class="text-center text-gray-500">
+            <!-- REAL webcam video feed -->
+            <video id="webcamVideo" autoplay muted playsinline
+              style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:none;"></video>
+            <!-- Emotion overlays on top of video -->
+            <div id="emotionOverlays" class="absolute top-2 left-2 flex flex-wrap gap-1" style="z-index:2"></div>
+            <!-- Face detection indicator -->
+            <div id="faceDetectBadge" class="hidden absolute bottom-2 right-2 text-xs font-bold px-2 py-1 rounded-full" style="background:rgba(0,200,100,0.85);color:white;z-index:3">
+              <i class="fas fa-smile mr-1"></i><span id="faceDetectLabel">Face detected</span>
+            </div>
+            <div id="cameraPlaceholder" class="text-center text-gray-500" style="z-index:1">
               <i class="fas fa-video text-4xl mb-2 block opacity-30"></i>
               <p class="text-xs">Start a session to enable<br/>live monitoring</p>
             </div>
-            <!-- Emotion overlays -->
-            <div id="emotionOverlays" class="absolute top-2 left-2 flex flex-wrap gap-1"></div>
           </div>
           <!-- Gaze metrics -->
           <div class="mt-3 grid grid-cols-3 gap-2 text-center" id="gazeMetrics">
@@ -2998,14 +3007,22 @@ const MINIGAME = {
   },
 
   startRepeatGame() {
-    document.getElementById('miniGameTitle').textContent = 'Repeat After Me!';
-    const phrases = ['A B C!', 'Clap clap clap!', 'Do re mi!', 'La la la!', 'Boom boom pow!'];
+    document.getElementById('miniGameTitle').textContent = '🎤 Repeat After Me!';
+    const phrases = ['A B C!', 'Clap clap clap!', 'Do re mi!', 'La la la!', 'Boom boom pow!', 'One two three!', 'Hip hip hooray!'];
     const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+    const hasVoice = VOICE_INPUT.isSupported();
+
     document.getElementById('miniGameContent').innerHTML = \`
       <div class="text-center space-y-4">
         <div class="text-2xl font-black text-yellow-300" id="mgPhrase">Listen...</div>
-        <div class="text-xs text-gray-400">I will say a phrase. Then you say it!</div>
-        <div class="grid grid-cols-2 gap-3 mt-4">
+        <div class="text-xs text-gray-400" id="mgInstructions">I will say a phrase. Then you say it back!</div>
+        <div id="mgMicStatus" class="text-green-400 text-sm font-black min-h-5"></div>
+        \${hasVoice ? \`
+        <button id="mgVoiceBtn" onclick="MINIGAME.startVoiceRepeat()" class="minigame-btn w-full py-4 hidden">
+          <div class="text-3xl mb-1">🎤</div>
+          <div class="text-sm">Tap to say it!</div>
+        </button>\` : ''}
+        <div class="grid grid-cols-2 gap-3 mt-4" id="mgManualBtns">
           <button onclick="MINIGAME.playerSay('correct')" class="minigame-btn">
             <div class="text-3xl mb-1">✅</div>
             <div class="text-sm">I said it!</div>
@@ -3016,29 +3033,68 @@ const MINIGAME = {
           </button>
         </div>
       </div>\`;
+
+    this._currentPhrase = phrase;
     setTimeout(async () => {
       document.getElementById('mgPhrase').textContent = phrase;
-      await speakText(phrase);
+      await speakText(phrase, 'excited');
       document.getElementById('mgPhrase').textContent = 'Now YOU say: ' + phrase;
+      document.getElementById('mgInstructions').textContent = hasVoice
+        ? 'Tap the mic button OR the ✅ when done!'
+        : 'Say it aloud, then tap ✅ when done!';
+      if (hasVoice) {
+        const vBtn = document.getElementById('mgVoiceBtn');
+        if (vBtn) vBtn.classList.remove('hidden');
+      }
     }, 500);
   },
 
+  startVoiceRepeat() {
+    const phrase = MINIGAME._currentPhrase;
+    if (!phrase) return;
+    VOICE_INPUT.listenFor(
+      phrase, 6000,
+      (heard) => {
+        // Match!
+        document.getElementById('mgMicStatus').textContent = '✅ ' + heard;
+        MINIGAME.playerSay('correct');
+      },
+      (heard) => {
+        // Near miss — still give credit after 2 tries
+        const micStatus = document.getElementById('mgMicStatus');
+        if (micStatus) micStatus.textContent = heard === 'timeout' ? '⏱️ Time up! Try again' : '🔄 Try again: ' + phrase;
+        REWARDS.playMicroSound(); // encourage anyway
+      }
+    );
+  },
+
   startClapGame() {
-    document.getElementById('miniGameTitle').textContent = 'Clap the Beat!';
+    document.getElementById('miniGameTitle').textContent = '👏 Clap the Beat!';
     const target = 3 + Math.floor(Math.random() * 3);
     this.sequence = [target];
-    let claps = 0;
+    const hasVoice = VOICE_INPUT.isSupported();
     document.getElementById('miniGameContent').innerHTML = \`
       <div class="text-center space-y-4">
         <div class="text-lg font-black" id="mgClapInstruct">Clap <span class="text-yellow-400 text-2xl">\${target}</span> times!</div>
         <button id="mgClapBtn" onclick="MINIGAME.registerClap()" class="minigame-btn w-full text-5xl py-6">👏</button>
         <div class="text-sm text-gray-400">Claps: <span id="mgClapCount" class="font-black text-pink-400">0</span> / \${target}</div>
+        \${hasVoice ? \`<div class="text-xs text-gray-500 mt-1">💡 Or say "done" / "finished" when you clap \${target} times!</div>\` : ''}
+        <div id="mgMicStatus" class="text-green-400 text-sm font-black min-h-5"></div>
       </div>\`;
-    speakText('Clap ' + target + ' times!');
+    speakText('Clap ' + target + ' times!', 'excited');
+    // Also listen for voice confirmation
+    if (hasVoice) {
+      setTimeout(() => {
+        VOICE_INPUT.listenFor('done finished clap ' + target, 8000,
+          () => MINIGAME.playerSay('correct'),
+          () => {} // silent fail — user uses button
+        );
+      }, 2000);
+    }
   },
 
   startRhythmGame() {
-    document.getElementById('miniGameTitle').textContent = 'Match the Rhythm!';
+    document.getElementById('miniGameTitle').textContent = '🥁 Match the Rhythm!';
     const patterns = [
       { label: 'SLOW SLOW FAST', beats: [600, 600, 200] },
       { label: 'FAST FAST SLOW', beats: [200, 200, 600] },
@@ -3046,6 +3102,7 @@ const MINIGAME = {
     ];
     const pat = patterns[Math.floor(Math.random() * patterns.length)];
     this.sequence = pat.beats;
+    const hasVoice = VOICE_INPUT.isSupported();
     document.getElementById('miniGameContent').innerHTML = \`
       <div class="text-center space-y-4">
         <div class="text-sm font-black text-yellow-300">\${pat.label}</div>
@@ -3053,10 +3110,23 @@ const MINIGAME = {
           <i class="fas fa-play mr-2"></i>Hear the rhythm
         </button>
         <button id="mgRhythmTap" onclick="MINIGAME.tapRhythm()" class="minigame-btn w-full py-4 hidden">
-          👆 TAP
+          👆 TAP the beat!
         </button>
+        \${hasVoice ? \`<button id="mgRhythmVoice" onclick="MINIGAME.voiceRhythm()" class="minigame-btn w-full py-3 hidden" style="background:rgba(0,150,255,0.25)">
+          🎤 Or say "done" when finished!
+        </button>\` : ''}
+        <div id="mgMicStatus" class="text-green-400 text-sm font-black min-h-5"></div>
         <div class="text-xs text-gray-400" id="mgRhythmStatus">Press play to hear it first</div>
       </div>\`;
+  },
+
+  voiceRhythm() {
+    const micStatus = document.getElementById('mgMicStatus');
+    if (micStatus) micStatus.textContent = '🎤 Say "done" when you finish tapping!';
+    VOICE_INPUT.listenFor('done finished', 8000,
+      () => MINIGAME.playerSay('correct'),
+      () => {} // silent fail
+    );
   },
 
   registerClap() {
@@ -3084,7 +3154,9 @@ const MINIGAME = {
     });
     setTimeout(() => {
       document.getElementById('mgRhythmTap').classList.remove('hidden');
-      document.getElementById('mgRhythmStatus').textContent = 'Now tap the same rhythm!';
+      const voiceBtn = document.getElementById('mgRhythmVoice');
+      if (voiceBtn) voiceBtn.classList.remove('hidden');
+      document.getElementById('mgRhythmStatus').textContent = 'Now tap — or say "done"!';
     }, t + 200);
   },
 
@@ -3485,14 +3557,9 @@ async function startSession() {
   document.getElementById('stopBtn').classList.remove('hidden');
   document.getElementById('sessionIndicator').style.display = 'flex';
   
-  // Start camera simulation
+  // ── Start REAL webcam feed ───────────────────────────────────
   document.getElementById('scanLine').style.display = 'block';
-  document.getElementById('cameraPlaceholder').innerHTML = \`
-    <div class="text-center">
-      <i class="fas fa-eye text-green-400 text-3xl mb-2 block"></i>
-      <p class="text-xs text-green-400 font-bold">Monitoring Active</p>
-      <p class="text-xs text-gray-500 mt-1">\${STATE.selectedChild.name} detected</p>
-    </div>\`;
+  startWebcam();
   
   document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live';
   document.getElementById('visionStatus').className = 'text-xs font-bold px-2 py-1 rounded-full bg-green-900 text-green-300';
@@ -3529,10 +3596,11 @@ async function stopSession() {
   document.getElementById('scanLine').style.display = 'none';
   document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-gray-500"></i>Offline';
   document.getElementById('visionStatus').className = 'text-xs font-bold px-2 py-1 rounded-full bg-gray-700';
-  document.getElementById('cameraPlaceholder').innerHTML = \`
-    <i class="fas fa-video text-4xl mb-2 block opacity-30"></i>
-    <p class="text-xs">Start a session to enable<br/>live monitoring</p>\`;
   document.getElementById('emotionOverlays').innerHTML = '';
+
+  // ── Stop webcam ─────────────────────────────────────────────
+  stopWebcam();
+  document.getElementById('cameraPlaceholder').style.display = 'flex';
 
   resetPlayer();
   addChatBubble('Great session! See you next time! 👋', 'ai');
@@ -3543,8 +3611,15 @@ async function stopSession() {
 
 async function greetChild() {
   if (!STATE.selectedChild || !STATE.currentSession) return;
-  // Use PERFORMER for expressive, energy-matched greeting
-  const text = PERFORMER.getGreeting(STATE.selectedChild.name, STATE.energyLevel);
+
+  // Try Groq for a personalised greeting, fall back to PERFORMER
+  let text;
+  const behavior = await GROQ_ENGINE.decide('greeting', 'talk').catch(() => null);
+  if (behavior?.text) {
+    text = behavior.text;
+  } else {
+    text = PERFORMER.getGreeting(STATE.selectedChild.name, STATE.energyLevel);
+  }
   addChatBubble(text + ' 🌟', 'ai');
 
   STATE.lastInteraction = 'talk';
@@ -3627,15 +3702,52 @@ async function triggerInteraction(trigger = 'manual') {
     // Store predicted next for preload
     if (predictedNext) STATE._predictedNextStyle = predictedNext;
 
-    // ── Talk phase ──────────────────────────────────────────
-    // Use PERFORMER for energy-matched, expressive lines
-    if (STATE.lastInteraction === 'sing' || STATE.lastInteraction === null) {
-      const talkText = STATE.lastInteraction === 'sing'
-        ? PERFORMER.getAfterSong(child.name, STATE.energyLevel)
-        : PERFORMER.getGreeting(child.name, STATE.energyLevel);
-      addChatBubble(talkText + ' 🎵', 'ai');
+    // ── Talk phase: Groq Cognitive Engine → PERFORMER fallback ──
+    // 1. Ask Groq for the next live-host action (cached, <6s timeout)
+    // 2. If Groq unavailable, fall back to PERFORMER deterministic lines
+    // This drives the "Ms. Rachel" live-host feel.
+    if (STATE.lastInteraction === 'sing' || STATE.lastInteraction === null || trigger === 'greeting') {
       updateStateUI('talk', trigger);
-      await speakText(talkText);
+
+      // Try Groq first (non-blocking — falls back instantly if unavailable)
+      let groqBehavior = null;
+      if (trigger !== 'skip') {
+        groqBehavior = await GROQ_ENGINE.decide(trigger);
+      }
+
+      let talkText;
+      if (groqBehavior?.text) {
+        // Groq gave us a live, context-aware response
+        talkText = groqBehavior.text;
+        STATE._lastGroqMode = groqBehavior.mode;
+        GROQ_ENGINE._consecutiveSongs = groqBehavior.mode === 'sing' ? GROQ_ENGINE._consecutiveSongs + 1 : 0;
+
+        // Handle any non-song follow-ups from Groq (minigame, question, etc.)
+        if (groqBehavior.followUp === 'start_minigame') {
+          addChatBubble(talkText + ' 🎮', 'ai');
+          await speakText(talkText, groqBehavior.tone);
+          const types = ['repeat', 'clap', 'rhythm'];
+          setTimeout(() => startMiniGame(types[Math.floor(Math.random() * types.length)]), 800);
+          STATE._interactionInProgress = false;
+          return; // Don't play a song after minigame start
+        }
+        if (groqBehavior.followUp === 'wait_for_response' || groqBehavior.followUp === 'ask_question') {
+          const q = groqBehavior.question || talkText;
+          addChatBubble(q + ' 🎤', 'ai');
+          await speakText(q, groqBehavior.tone);
+          VOICE_INPUT.listenForResponse(7000);
+          // Continue to music after brief pause
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } else {
+        // PERFORMER fallback (always works, no API needed)
+        talkText = STATE.lastInteraction === 'sing'
+          ? PERFORMER.getAfterSong(child.name, STATE.energyLevel)
+          : PERFORMER.getGreeting(child.name, STATE.energyLevel);
+      }
+
+      addChatBubble(talkText + ' 🎵', 'ai');
+      await speakText(talkText, groqBehavior?.tone);
     }
 
     // ── Music generation ────────────────────────────────────
@@ -3645,9 +3757,9 @@ async function triggerInteraction(trigger = 'manual') {
     if (STATE.nextSnippet && trigger !== 'manual') {
       snippet = STATE.nextSnippet;
       STATE.nextSnippet = null;
-      addChatBubble('Got your next song ready!', 'ai');
+      addChatBubble('Got your next song ready! 🎵', 'ai');
     } else {
-      addChatBubble('Generating a new song just for you...', 'ai');
+      addChatBubble('Finding the perfect song for you... 🎵', 'ai');
       const r = await api('POST', '/music/generate', {
         child_id: child.id,
         session_id: STATE.currentSession.id,
@@ -3668,6 +3780,19 @@ async function triggerInteraction(trigger = 'manual') {
     STATE.lastInteraction = 'sing';
     STATE.lastInteractionTime = Date.now();
     STATE.consecutiveSongs++;
+    GROQ_ENGINE._consecutiveSongs++;
+
+    // ── Update Groq loop state async ─────────────────────────
+    if (STATE.currentSession) {
+      api('POST', '/groq/loop-state', {
+        sessionId: STATE.currentSession.id,
+        childId: child.id,
+        currentMode: 'sing',
+        energyLevel: STATE.energyLevel,
+        addSong: true,
+        consecutiveSongs: GROQ_ENGINE._consecutiveSongs,
+      }).catch(() => {}); // fire-and-forget
+    }
 
     // ── Transition cue → then music ─────────────────────────
     const transText = PERFORMER.getTransition(child.name, STATE.energyLevel);
@@ -4007,12 +4132,24 @@ async function sendEngagementCue(type, intensity) {
 
   if (!r.success) return;
 
+  // ── Also post to Groq engagement stream (non-blocking) ──────
+  // This enriches the Groq context so future decisions are more accurate
+  api('POST', '/groq/engage', {
+    sessionId: STATE.currentSession.id,
+    childId: STATE.selectedChild.id,
+    eventType: type,
+    value: intensity,
+    confidence: 0.85,
+  }).catch(() => {});
+
   // Visual feedback
   const badge = document.createElement('div');
   badge.className = 'emotion-badge';
   const colors = { smile:'bg-yellow-500 bg-opacity-80', laughter:'bg-pink-500 bg-opacity-80',
-    fixation:'bg-green-500 bg-opacity-80', attention_loss:'bg-gray-500 bg-opacity-80', boredom:'bg-blue-900 bg-opacity-80' };
-  const icons = { smile:'😊', laughter:'😂', fixation:'👀', attention_loss:'😴', boredom:'🥱' };
+    fixation:'bg-green-500 bg-opacity-80', attention_loss:'bg-gray-500 bg-opacity-80', boredom:'bg-blue-900 bg-opacity-80',
+    face_motion:'bg-teal-500 bg-opacity-60', voice_detected:'bg-purple-500 bg-opacity-80' };
+  const icons = { smile:'😊', laughter:'😂', fixation:'👀', attention_loss:'😴', boredom:'🥱',
+    face_motion:'🎥', voice_detected:'🎤' };
   badge.className = \`emotion-badge \${colors[type]||'bg-gray-600'}\`;
   badge.innerHTML = \`\${icons[type]||'•'} \${type.replace('_',' ')}\`;
   const overlay = document.getElementById('emotionOverlays');
@@ -4023,12 +4160,16 @@ async function sendEngagementCue(type, intensity) {
   if (type === 'smile') {
     STATE.smileCount++;
     document.getElementById('smileCount').textContent = STATE.smileCount;
-    // Micro reward on every smile
     REWARDS.fire('micro', { trigger: 'smile' });
     STATE.engScore = Math.min(100, STATE.engScore + 5);
     updateEngagementScoreUI();
-    // Joy response in chat (no speech mid-song to avoid overlap)
-    if (STATE.isPlaying && STATE.currentSnippet) {
+    // Groq celebrate response on 3rd+ smile (live-host reacts!)
+    if (STATE.smileCount === 3 || STATE.smileCount % 5 === 0) {
+      GROQ_ENGINE.decide('celebrate_smile', 'celebrate').then(b => {
+        if (b?.text) { addChatBubble(b.text + ' 😍', 'ai'); if (!STATE.isPlaying) speakText(b.text, b.tone); }
+        else { const msg = PERFORMER.getJoy(STATE.selectedChild?.name || 'friend', STATE.energyLevel); addChatBubble(msg + ' 😍', 'ai'); }
+      }).catch(() => {});
+    } else if (STATE.isPlaying && STATE.currentSnippet) {
       setTimeout(() => {
         const msg = PERFORMER.getJoy(STATE.selectedChild?.name || 'friend', STATE.energyLevel);
         addChatBubble(msg + ' 😍', 'ai');
@@ -4038,11 +4179,14 @@ async function sendEngagementCue(type, intensity) {
   if (type === 'laughter') {
     STATE.laughCount++;
     document.getElementById('laughCount').textContent = STATE.laughCount;
-    // Medium reward on laughter
     REWARDS.fire('medium', { trigger: 'laughter' });
-    const laughMsg = PERFORMER.getJoy(STATE.selectedChild?.name || 'friend', STATE.energyLevel);
-    addChatBubble(laughMsg + ' 😂🎵', 'ai');
-    if (!STATE.isPlaying) speakText(laughMsg);
+    // Ask Groq for a celebrate response
+    GROQ_ENGINE.decide('laugh_detected', 'celebrate').then(b => {
+      const msg = b?.text || PERFORMER.getJoy(STATE.selectedChild?.name || 'friend', STATE.energyLevel);
+      const tone = b?.tone;
+      addChatBubble(msg + ' 😂🎵', 'ai');
+      if (!STATE.isPlaying) speakText(msg, tone);
+    }).catch(() => {});
     STATE.engScore = Math.min(100, STATE.engScore + 15);
     updateEngagementScoreUI();
   }
@@ -4053,13 +4197,13 @@ async function sendEngagementCue(type, intensity) {
   }
   if (type === 'attention_loss' && STATE.sessionActive && !STATE.isPlaying) {
     setTimeout(async () => {
-      const reengageTexts = [
-        \`Hey \${STATE.selectedChild.name}! I have got something special!\`,
-        \`Want to hear a really fun song?\`,
-      ];
-      const msg = reengageTexts[Math.floor(Math.random() * reengageTexts.length)];
+      // Use Groq reengage mode, fall back to static text
+      const behavior = await GROQ_ENGINE.decide('attention_loss', 'reengage').catch(() => null);
+      const msg = behavior?.text
+        || \`Hey \${STATE.selectedChild?.name || 'friend'}! Come back — I have something special for you! 🎵\`;
+      const tone = behavior?.tone;
       addChatBubble(msg + ' 🎵', 'ai');
-      await speakText(msg);
+      await speakText(msg, tone);
       if (STATE.mode === 'auto') triggerInteraction('re_engage');
     }, 1000);
   }
@@ -4089,6 +4233,338 @@ function updateGaze(e) {
 function sendGazeCue(e) {
   sendEngagementCue('fixation', 0.7 + Math.random() * 0.3);
 }
+
+// ── Real Webcam Feed ──────────────────────────────────────────
+// Shows the actual camera — child sees their own face mirrored
+// while the system tracks engagement (smiles, gaze, attention)
+const WEBCAM = {
+  stream: null,
+  faceCheckInterval: null,
+
+  async start() {
+    const video = document.getElementById('webcamVideo');
+    const placeholder = document.getElementById('cameraPlaceholder');
+    if (!video) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 320 }, height: { ideal: 240 }, facingMode: 'user' },
+        audio: false,
+      });
+      WEBCAM.stream = stream;
+      video.srcObject = stream;
+      video.style.transform = 'scaleX(-1)'; // mirror view — feels more natural
+      video.style.display = 'block';
+      if (placeholder) placeholder.style.display = 'none';
+
+      // Start face presence detection loop
+      WEBCAM.startFaceDetection(video);
+
+      document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live';
+    } catch (err) {
+      // Camera permission denied or unavailable — show fallback
+      console.warn('[Webcam] Camera not available:', err.message);
+      if (placeholder) {
+        placeholder.style.display = 'flex';
+        placeholder.innerHTML = \`
+          <div class="text-center">
+            <i class="fas fa-eye text-green-400 text-3xl mb-2 block"></i>
+            <p class="text-xs text-green-400 font-bold">Session Active</p>
+            <p class="text-xs text-gray-500 mt-1">\${STATE.selectedChild?.name || ''} — camera permission needed for vision</p>
+          </div>\`;
+      }
+    }
+  },
+
+  stop() {
+    if (WEBCAM.faceCheckInterval) {
+      clearInterval(WEBCAM.faceCheckInterval);
+      WEBCAM.faceCheckInterval = null;
+    }
+    if (WEBCAM.stream) {
+      WEBCAM.stream.getTracks().forEach(t => t.stop());
+      WEBCAM.stream = null;
+    }
+    const video = document.getElementById('webcamVideo');
+    if (video) { video.srcObject = null; video.style.display = 'none'; }
+    const badge = document.getElementById('faceDetectBadge');
+    if (badge) badge.classList.add('hidden');
+  },
+
+  // Lightweight canvas-based face presence check (no ML library needed)
+  // Detects motion/presence by analyzing pixel brightness variance
+  startFaceDetection(video) {
+    const canvas = document.createElement('canvas');
+    canvas.width  = 80;   // tiny for performance
+    canvas.height = 60;
+    const ctx = canvas.getContext('2d');
+    let prevBrightness = 0;
+    let noMotionFrames = 0;
+    const badge = document.getElementById('faceDetectBadge');
+    const label = document.getElementById('faceDetectLabel');
+
+    WEBCAM.faceCheckInterval = setInterval(() => {
+      try {
+        ctx.drawImage(video, 0, 0, 80, 60);
+        const data = ctx.getImageData(0, 0, 80, 60).data;
+        let brightness = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          brightness += (data[i] + data[i+1] + data[i+2]) / 3;
+        }
+        brightness /= (data.length / 4);
+
+        const motion = Math.abs(brightness - prevBrightness);
+        prevBrightness = brightness;
+
+        // A very dark frame means no face / camera covered
+        const facePresent = brightness > 15;
+
+        if (badge) {
+          if (facePresent) {
+            badge.classList.remove('hidden');
+            if (motion < 0.5) {
+              noMotionFrames++;
+              if (noMotionFrames > 10 && label) label.textContent = 'Still — looking!';
+            } else {
+              noMotionFrames = 0;
+              if (label) label.textContent = 'Active ✨';
+              // Register engagement event when motion detected
+              if (STATE.sessionActive && STATE.currentSession && motion > 3) {
+                sendEngagementCue('face_motion', Math.min(1, motion / 20));
+              }
+            }
+          } else {
+            badge.classList.add('hidden');
+            noMotionFrames = 0;
+          }
+        }
+      } catch (e) { /* frame not ready yet */ }
+    }, 800);
+  },
+};
+
+function startWebcam() { WEBCAM.start(); }
+function stopWebcam()  { WEBCAM.stop(); }
+
+// ── Groq Real-Time Behavior Engine (Frontend) ─────────────────
+// Calls the Groq backend and drives the live interaction loop.
+// This is the master conductor: it decides what to DO next.
+const GROQ_ENGINE = {
+  _lastCall: 0,
+  _minInterval: 4000,  // Don't call Groq more than once per 4s
+  _consecutiveSongs: 0,
+
+  buildEngagement() {
+    return {
+      smileCount:    STATE.smileCount   || 0,
+      laughCount:    STATE.laughCount   || 0,
+      attentionLoss: STATE.engScore < 20 ? 2 : 0,
+      intensity:     Math.min(1, (STATE.engScore || 50) / 100),
+      voiceDetected: false,
+      gazeOnScreen:  true,
+      dominantEvent: STATE.smileCount > STATE.laughCount ? 'smile' : 'laughter',
+      recentEvents:  STATE.cycleLog?.slice(-5) || [],
+    };
+  },
+
+  buildContext(trigger) {
+    const child = STATE.selectedChild || { name: 'friend', age: 5, preferred_style: 'playful' };
+    const age = child.age || 5;
+    return {
+      childName:       child.name,
+      childAge:        age,
+      ageGroup:        age < 3 ? 'toddler' : age < 6 ? 'preschool' : 'early_school',
+      preferredStyle:  child.preferred_style || 'playful',
+      energyLevel:     STATE.energyLevel || 'medium',
+      currentMode:     STATE.lastInteraction || 'talk',
+      lastMode:        STATE._lastMode || null,
+      sessionDuration: STATE.currentSession
+        ? Math.round((Date.now() - new Date(STATE.currentSession.started_at).getTime()) / 60000)
+        : 0,
+      songCount:       STATE.consecutiveSongs || 0,
+      talkCount:       0,
+      lastInteraction: new Date().toISOString(),
+      consecutiveSongs: GROQ_ENGINE._consecutiveSongs,
+      trigger,
+    };
+  },
+
+  async decide(trigger = 'auto', forceMode = null) {
+    // Throttle — avoid hammering Groq
+    const now = Date.now();
+    if (now - GROQ_ENGINE._lastCall < GROQ_ENGINE._minInterval) return null;
+    GROQ_ENGINE._lastCall = now;
+
+    const payload = {
+      intent: 'GENERATE_BEHAVIOR',
+      userId: AUTH.user?.id ? String(AUTH.user.id) : 'demo',
+      childId:   STATE.selectedChild?.id ?? undefined,
+      sessionId: STATE.currentSession?.id ?? undefined,
+      data: {
+        context:    GROQ_ENGINE.buildContext(trigger),
+        engagement: GROQ_ENGINE.buildEngagement(),
+        forceMode:  forceMode ?? undefined,
+      },
+    };
+
+    try {
+      const r = await api('POST', '/intent', payload);
+      if (r.success && r.data?.text) {
+        return r.data;  // BehaviorResponse: { mode, tone, text, followUp, timing }
+      }
+    } catch(e) {
+      // Intent unavailable — silently fall through
+    }
+    return null;
+  },
+
+  // Apply a behavior response: speak the text and handle follow-up
+  async apply(behavior, skipSpeak = false) {
+    if (!behavior) return;
+    const { mode, tone, text, followUp } = behavior;
+
+    // Emit to chat
+    if (text) addChatBubble(text + ' 🎵', 'ai');
+
+    // Track mode for next context
+    STATE._lastMode = STATE.lastInteraction;
+
+    // Speak the text with the right emotion
+    if (!skipSpeak && text) {
+      await speakText(text, tone);
+    }
+
+    // Handle follow-up action
+    switch (followUp) {
+      case 'play_next_song':
+      case 'sing_along':
+        if (STATE.sessionActive && !STATE.isPlaying) {
+          setTimeout(() => triggerInteraction('groq_followup'), 800);
+        }
+        break;
+      case 'start_minigame':
+        const types = ['repeat', 'clap', 'rhythm'];
+        setTimeout(() => startMiniGame(types[Math.floor(Math.random() * types.length)]), 1000);
+        break;
+      case 'celebrate_achievement':
+        REWARDS.fire('major', { trigger: 'groq_celebrate' });
+        break;
+      case 'wait_for_response':
+      case 'encourage_participation':
+        // Start voice recognition for child response
+        VOICE_INPUT.listenForResponse(5000);
+        break;
+    }
+  },
+};
+
+// ── Voice Input (Web Speech Recognition) ─────────────────────
+// Listens to the child's voice and drives engagement events.
+const VOICE_INPUT = {
+  _recognition: null,
+  _listening: false,
+  _gameCallback: null,
+
+  isSupported() {
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  },
+
+  create(continuous = false, interimResults = false) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    const r = new SR();
+    r.continuous      = continuous;
+    r.interimResults  = interimResults;
+    r.maxAlternatives = 1;
+    r.lang            = 'en-US';
+    return r;
+  },
+
+  // Listen once for child response (e.g. in games or after Groq asks a question)
+  listenForResponse(timeoutMs = 8000) {
+    if (!VOICE_INPUT.isSupported() || VOICE_INPUT._listening) return;
+
+    const r = VOICE_INPUT.create();
+    if (!r) return;
+
+    VOICE_INPUT._listening = true;
+    VOICE_INPUT._recognition = r;
+
+    // Show listening indicator
+    showToast('Listening... 🎤', '🎤', 'info');
+
+    r.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.toLowerCase().trim() || '';
+      VOICE_INPUT._listening = false;
+
+      if (transcript) {
+        addChatBubble(transcript + ' 🗣️', 'user');
+        STATE.smileCount++; // voice = positive engagement
+        sendEngagementCue('voice_detected', 0.8);
+
+        // If there is a game callback, fire it
+        if (VOICE_INPUT._gameCallback) {
+          VOICE_INPUT._gameCallback(transcript);
+          VOICE_INPUT._gameCallback = null;
+        } else {
+          // Let Groq respond to what the child said
+          GROQ_ENGINE.decide('voice_response').then(b => GROQ_ENGINE.apply(b));
+        }
+      }
+    };
+
+    r.onerror = () => { VOICE_INPUT._listening = false; };
+    r.onend   = () => { VOICE_INPUT._listening = false; };
+
+    r.start();
+    setTimeout(() => {
+      try { r.stop(); } catch(e) {}
+      VOICE_INPUT._listening = false;
+    }, timeoutMs);
+  },
+
+  // Listen for a specific word/phrase and call callback
+  listenFor(expectedPhrase, timeoutMs, onSuccess, onFail) {
+    if (!VOICE_INPUT.isSupported()) { if (onFail) onFail('not_supported'); return; }
+
+    const r = VOICE_INPUT.create();
+    if (!r) { if (onFail) onFail('no_recognition'); return; }
+
+    VOICE_INPUT._listening = true;
+    VOICE_INPUT._recognition = r;
+
+    const micIcon = document.getElementById('mgMicStatus');
+    if (micIcon) micIcon.textContent = '🎤 Listening...';
+
+    r.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.toLowerCase().trim() || '';
+      VOICE_INPUT._listening = false;
+      const expected = expectedPhrase.toLowerCase();
+      // Fuzzy match: check if any key word present
+      const words = expected.split(/\\s+/);
+      const matched = words.some(w => w.length > 2 && transcript.includes(w));
+      if (matched || transcript.includes(expected)) {
+        if (onSuccess) onSuccess(transcript);
+      } else {
+        if (onFail) onFail(transcript);
+      }
+    };
+
+    r.onerror = () => { VOICE_INPUT._listening = false; if (onFail) onFail('error'); };
+    r.onend   = () => {
+      VOICE_INPUT._listening = false;
+      if (micIcon) micIcon.textContent = '';
+    };
+
+    r.start();
+    setTimeout(() => {
+      try { r.stop(); } catch(e) {}
+      VOICE_INPUT._listening = false;
+      // If no result yet, treat as timeout
+      if (onFail) onFail('timeout');
+    }, timeoutMs);
+  },
+};
 
 // ── Background listening ──────────────────────────────────────
 async function detectBackground() {
@@ -4144,8 +4620,19 @@ async function speakText(text, emotionHint) {
   // Apply expression engine + PERFORMER for human, energetic delivery
   const expressiveText = EXPRESSOR.express(cleanText);
 
-  // ── Determine emotion from context ────────────────────────────
-  const emotion = emotionHint
+  // ── Map Groq BehaviorTone → TTS emotion ───────────────────────
+  // Groq returns tones like 'warm','playful','soothing','encouraging',
+  // 'celebratory','curious','gentle'. TTS understands: 'friendly',
+  // 'excited','calm','encouraging','whisper','singing'.
+  const TONE_TO_EMOTION = {
+    warm: 'friendly', playful: 'excited', soothing: 'calm',
+    encouraging: 'encouraging', celebratory: 'excited',
+    curious: 'friendly', gentle: 'calm',
+    excited: 'excited', calm: 'calm', friendly: 'friendly',
+    singing: 'singing', whisper: 'whisper', surprised: 'excited',
+  };
+  const resolvedEmotion = TONE_TO_EMOTION[emotionHint]
+    || emotionHint  // pass through if already a valid TTS emotion
     || (STATE.energyLevel === 'high' ? 'excited'
         : STATE.energyLevel === 'low' ? 'calm'
         : 'friendly');
@@ -4162,7 +4649,7 @@ async function speakText(text, emotionHint) {
       sessionId: STATE.currentSession?.id ?? undefined,
       data: {
         text:    expressiveText,
-        emotion: emotion,
+        emotion: resolvedEmotion,
         style:   STATE.sessionActive ? 'children_host' : 'neutral',
       },
     });

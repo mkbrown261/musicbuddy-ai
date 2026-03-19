@@ -12,6 +12,7 @@ import { GazeTrackerModule } from './gaze-tracker';
 import { BehaviorLoopModule } from './behavior-loop';
 import { FreeFeaturesModule } from './free-features';
 import { BillingKeysModule } from './billing-keys';
+import { GroqBehaviorModule } from './groq-behavior';
 
 export function bootstrapModules(): void {
   router.register(new SongLibraryModule());
@@ -20,7 +21,8 @@ export function bootstrapModules(): void {
   router.register(new BehaviorLoopModule());
   router.register(new FreeFeaturesModule());
   router.register(new BillingKeysModule());
-  console.log('[ModuleRegistry] All 6 modules registered with IntentRouter');
+  router.register(new GroqBehaviorModule());
+  console.log('[ModuleRegistry] All 7 modules registered with IntentRouter (incl. Groq Behavior Engine)');
 }
 
 // Re-export router and modules for convenience
@@ -33,3 +35,4 @@ export { GazeTrackerModule } from './gaze-tracker';
 export { BehaviorLoopModule } from './behavior-loop';
 export { FreeFeaturesModule, FEATURE_REGISTRY } from './free-features';
 export { BillingKeysModule, PLANS } from './billing-keys';
+export { GroqBehaviorModule } from './groq-behavior';

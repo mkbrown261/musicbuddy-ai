@@ -30,6 +30,7 @@ import { logUsage, recordBillingEvent, getVoicePreferences } from './usage-track
 import { generateOpenAITTS } from './providers/openai';
 import { generateElevenLabsTTS } from './providers/elevenlabs';
 import { generatePollyTTS } from './providers/polly';
+import { generateReplicateTTS } from './providers/replicate';
 import { handleFallback } from './fallback-handler';
 
 // ── Call the resolved provider ─────────────────────────────────
@@ -40,8 +41,13 @@ async function callResolvedProvider(
 ): Promise<TTSResponse> {
   switch (config.provider) {
     case 'elevenlabs':
-      if (!env.ELEVENLABS_API_KEY) break;
-      return generateElevenLabsTTS(text, config, env.ELEVENLABS_API_KEY);
+      // Direct ElevenLabs key takes priority
+      if (env.ELEVENLABS_API_KEY)
+        return generateElevenLabsTTS(text, config, env.ELEVENLABS_API_KEY);
+      // Replicate provides ElevenLabs quality for free users
+      if (env.REPLICATE_API_KEY)
+        return generateReplicateTTS(text, config, env.REPLICATE_API_KEY);
+      break;
 
     case 'openai':
       if (!env.OPENAI_API_KEY) break;

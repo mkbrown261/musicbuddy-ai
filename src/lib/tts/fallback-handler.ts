@@ -22,6 +22,7 @@ import { TIER_DEFAULTS } from './types';
 import { generateOpenAITTS } from './providers/openai';
 import { generateElevenLabsTTS } from './providers/elevenlabs';
 import { generatePollyTTS } from './providers/polly';
+import { generateReplicateTTS } from './providers/replicate';
 
 // ── Timeout wrapper ───────────────────────────────────────────
 async function withTimeout<T>(
@@ -54,22 +55,20 @@ async function callProvider(
 
   switch (provider) {
     case 'elevenlabs': {
-      if (!env.ELEVENLABS_API_KEY) {
-        return {
-          audioUrl: null, provider: 'elevenlabs', voiceId: 'rachel',
-          tier: 'premium', cacheHit: false, charCount: 0,
-          error: 'ElevenLabs API key not configured',
-        };
+      // Try direct ElevenLabs key first, then Replicate
+      if (env.ELEVENLABS_API_KEY) {
+        const config: VoiceConfig = { ...TIER_DEFAULTS.premium, ...overrideConfig };
+        return withTimeout(generateElevenLabsTTS(text, config, env.ELEVENLABS_API_KEY), TIMEOUT_MS, 'ElevenLabs timeout');
       }
-      const config: VoiceConfig = {
-        ...TIER_DEFAULTS.premium,
-        ...overrideConfig,
+      if (env.REPLICATE_API_KEY) {
+        const config: VoiceConfig = { ...TIER_DEFAULTS.trial, ...overrideConfig };
+        return withTimeout(generateReplicateTTS(text, config, env.REPLICATE_API_KEY), TIMEOUT_MS, 'Replicate ElevenLabs timeout');
+      }
+      return {
+        audioUrl: null, provider: 'elevenlabs', voiceId: 'rachel',
+        tier: 'premium', cacheHit: false, charCount: 0,
+        error: 'ElevenLabs/Replicate API key not configured',
       };
-      return withTimeout(
-        generateElevenLabsTTS(text, config, env.ELEVENLABS_API_KEY),
-        TIMEOUT_MS,
-        'ElevenLabs timeout after 8s'
-      );
     }
 
     case 'openai': {
