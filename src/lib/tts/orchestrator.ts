@@ -32,6 +32,7 @@ import { generateElevenLabsTTS } from './providers/elevenlabs';
 import { generatePollyTTS } from './providers/polly';
 import { generateReplicateTTS } from './providers/replicate';
 import { handleFallback } from './fallback-handler';
+import { applyPersonality, mergePersonalityIntoConfig } from '../groq/personality';
 
 // ── Call the resolved provider ─────────────────────────────────
 async function callResolvedProvider(
@@ -94,18 +95,41 @@ export async function requestTTS(
   const { tier, voiceConfig, trialRemaining } = resolution;
 
   // ─────────────────────────────────────────────────────────
-  // STEP 2: Generate cache key
+  // STEP 2: GROQ PERSONALITY STAGE — rewrite text + select voice
+  // Transforms flat text → expressive children's host speech.
+  // Runs ONLY for ElevenLabs (Groq personality is wasted on Polly/demo).
+  // Falls back to local enrichment if Groq unavailable.
   // ─────────────────────────────────────────────────────────
-  const cacheKey = await generateCacheKey(
-    request.text,
-    voiceConfig.voiceId,
-    voiceConfig.style,
-    voiceConfig.emotion
-  );
-  const textHash = await generateTextHash(request.text);
+  let finalText     = request.text;
+  let finalConfig   = voiceConfig;
+
+  if (voiceConfig.provider === 'elevenlabs') {
+    const gender = (userPrefs?.voiceGender as 'female' | 'male') ?? 'female';
+    const personality = await applyPersonality(
+      request.text,
+      voiceConfig.emotion,
+      voiceConfig.style,
+      gender,
+      env.GROQ_API_KEY,          // runs Groq rewrite if key present
+      request.voiceOverride,     // respect explicit voice override
+    );
+    finalText   = personality.text;
+    finalConfig = mergePersonalityIntoConfig(voiceConfig, personality);
+  }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 3: RetrieveCachedAudio — NEVER regenerate if cached
+  // STEP 3: Generate cache key (on final text + final voice)
+  // ─────────────────────────────────────────────────────────
+  const cacheKey = await generateCacheKey(
+    finalText,
+    finalConfig.voiceId,
+    finalConfig.style,
+    finalConfig.emotion
+  );
+  const textHash = await generateTextHash(finalText);
+
+  // ─────────────────────────────────────────────────────────
+  // STEP 4: RetrieveCachedAudio — NEVER regenerate if cached
   // ─────────────────────────────────────────────────────────
   if (!request.skipCache) {
     const cached = await retrieveCachedAudio(db, cacheKey);
@@ -127,21 +151,20 @@ export async function requestTTS(
   }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 4: GenerateTTS
+  // STEP 5: GenerateTTS — use personality-enriched text + config
   // ─────────────────────────────────────────────────────────
-  let response = await callResolvedProvider(request.text, voiceConfig, env);
+  let response = await callResolvedProvider(finalText, finalConfig, env);
 
   // ─────────────────────────────────────────────────────────
-  // STEP 5: HandleFallback if generation failed
+  // STEP 6: HandleFallback if generation failed
   // ─────────────────────────────────────────────────────────
   if (!response.audioUrl) {
-    // Build ordered fallback chain (skip the failed provider)
     const chain: TTSProvider[] = [];
-    if (voiceConfig.provider !== 'elevenlabs' && env.ELEVENLABS_API_KEY) chain.push('elevenlabs');
-    if (voiceConfig.provider !== 'openai'     && env.OPENAI_API_KEY)     chain.push('openai');
-    if (voiceConfig.provider !== 'polly'      && env.AWS_ACCESS_KEY_ID)  chain.push('polly');
+    if (finalConfig.provider !== 'elevenlabs' && (env.ELEVENLABS_API_KEY || env.REPLICATE_API_KEY)) chain.push('elevenlabs');
+    if (finalConfig.provider !== 'openai'     && env.OPENAI_API_KEY)     chain.push('openai');
+    if (finalConfig.provider !== 'polly'      && env.AWS_ACCESS_KEY_ID)  chain.push('polly');
 
-    const fallbackResult = await handleFallback(request.text, env, chain, voiceConfig);
+    const fallbackResult = await handleFallback(finalText, env, chain, finalConfig);
     response = fallbackResult.response;
 
     // Record fallback event for analytics
@@ -158,7 +181,7 @@ export async function requestTTS(
   }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 6: CacheAudio (async — never blocks the response)
+  // STEP 7: CacheAudio (async — never blocks the response)
   // ─────────────────────────────────────────────────────────
   if (response.audioUrl && !request.skipCache) {
     cacheAudio(db, {
@@ -166,8 +189,8 @@ export async function requestTTS(
       textHash,
       provider:  response.provider,
       voiceId:   response.voiceId,
-      style:     voiceConfig.style,
-      emotion:   voiceConfig.emotion,
+      style:     finalConfig.style,
+      emotion:   finalConfig.emotion,
       audioData: response.audioUrl,
       charCount: response.charCount,
       // @ts-ignore
@@ -176,7 +199,7 @@ export async function requestTTS(
   }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 7: TrackUsage (async — never blocks the response)
+  // STEP 8: TrackUsage (async — never blocks the response)
   // ─────────────────────────────────────────────────────────
   if (!response.cacheHit) {
     logUsage(db, {
@@ -196,7 +219,7 @@ export async function requestTTS(
   }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 8: Check if trial billing event should fire
+  // STEP 9: Check if trial billing event should fire
   // ─────────────────────────────────────────────────────────
   if (tier === 'trial' && trialRemaining !== undefined) {
     const newRemaining = trialRemaining - 1;

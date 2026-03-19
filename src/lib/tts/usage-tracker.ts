@@ -223,6 +223,7 @@ export async function getVoicePreferences(
   speed: number;
   defaultEmotion: string;
   singingMode: boolean;
+  voiceGender: 'female' | 'male';
 } | null> {
   try {
     const row = await db.prepare(
@@ -237,6 +238,7 @@ export async function getVoicePreferences(
       speed:             row.speed,
       defaultEmotion:    row.default_emotion,
       singingMode:       row.singing_mode === 1,
+      voiceGender:       (row.voice_gender === 'male' ? 'male' : 'female') as 'female' | 'male',
     };
   } catch { return null; }
 }
@@ -253,14 +255,15 @@ export async function saveVoicePreferences(
     speed?: number;
     defaultEmotion?: string;
     singingMode?: boolean;
+    voiceGender?: 'female' | 'male';
   }
 ): Promise<void> {
   try {
     await db.prepare(
       `INSERT INTO tts_voice_preferences
          (user_id, preferred_provider, openai_voice, elevenlabs_voice, polly_voice,
-          speed, default_emotion, singing_mode, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          speed, default_emotion, singing_mode, voice_gender, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(user_id) DO UPDATE SET
          preferred_provider = COALESCE(excluded.preferred_provider, preferred_provider),
          openai_voice       = COALESCE(excluded.openai_voice, openai_voice),
@@ -269,6 +272,7 @@ export async function saveVoicePreferences(
          speed              = COALESCE(excluded.speed, speed),
          default_emotion    = COALESCE(excluded.default_emotion, default_emotion),
          singing_mode       = COALESCE(excluded.singing_mode, singing_mode),
+         voice_gender       = COALESCE(excluded.voice_gender, voice_gender),
          updated_at         = CURRENT_TIMESTAMP`
     ).bind(
       userId,
@@ -278,7 +282,8 @@ export async function saveVoicePreferences(
       prefs.pollyVoice ?? null,
       prefs.speed ?? null,
       prefs.defaultEmotion ?? null,
-      prefs.singingMode != null ? (prefs.singingMode ? 1 : 0) : null
+      prefs.singingMode != null ? (prefs.singingMode ? 1 : 0) : null,
+      prefs.voiceGender ?? null
     ).run();
   } catch (e) {
     console.error('[UsageTracker] saveVoicePreferences error:', e);

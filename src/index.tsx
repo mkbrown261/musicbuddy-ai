@@ -1542,6 +1542,134 @@ function getMainHTML(): string {
       </div>
 
       <!-- Audio Settings (unchanged) -->
+      <!-- ── Voice Personality Engine ─────────────────────────── -->
+      <div class="glass p-6" id="voicePersonalityPanel">
+        <h3 class="font-black text-lg mb-4 flex items-center gap-2">
+          <i class="fas fa-microphone-alt text-pink-400"></i> Voice Personality Engine
+          <span class="text-xs font-normal text-green-400 ml-auto px-2 py-1 rounded-full" style="background:rgba(0,200,100,0.15)" id="voiceEngineStatus">Loading...</span>
+        </h3>
+
+        <!-- Girl / Boy toggle -->
+        <div class="mb-5">
+          <label class="text-sm font-bold text-gray-300 block mb-3">Host Voice Gender</label>
+          <div class="grid grid-cols-2 gap-3">
+            <button id="voiceGenderFemale" onclick="setVoiceGender('female')"
+              class="voice-gender-btn flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all"
+              style="border-color:#ff6b9d;background:rgba(255,107,157,0.15)">
+              <span class="text-3xl">🎀</span>
+              <span class="font-black text-sm">Girl Voice</span>
+              <span class="text-xs text-gray-400">Warm &amp; nurturing</span>
+            </button>
+            <button id="voiceGenderMale" onclick="setVoiceGender('male')"
+              class="voice-gender-btn flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all"
+              style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+              <span class="text-3xl">🧢</span>
+              <span class="font-black text-sm">Boy Voice</span>
+              <span class="text-xs text-gray-400">Friendly &amp; fun</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Voice Style -->
+        <div class="mb-5">
+          <label class="text-sm font-bold text-gray-300 block mb-3">Voice Personality Style</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="setVoiceStyle('default')" id="vstyle-default"
+              class="vstyle-btn text-sm py-2 px-3 rounded-xl border-2 transition-all font-bold"
+              style="border-color:#ff6b9d;background:rgba(255,107,157,0.15)">
+              ⭐ Default (Warm)
+            </button>
+            <button onclick="setVoiceStyle('playful')" id="vstyle-playful"
+              class="vstyle-btn text-sm py-2 px-3 rounded-xl border-2 transition-all font-bold"
+              style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+              🎈 Playful
+            </button>
+            <button onclick="setVoiceStyle('energetic')" id="vstyle-energetic"
+              class="vstyle-btn text-sm py-2 px-3 rounded-xl border-2 transition-all font-bold"
+              style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+              ⚡ Energetic
+            </button>
+            <button onclick="setVoiceStyle('soothing')" id="vstyle-soothing"
+              class="vstyle-btn text-sm py-2 px-3 rounded-xl border-2 transition-all font-bold"
+              style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+              🌙 Soothing
+            </button>
+          </div>
+        </div>
+
+        <!-- Expressiveness sliders -->
+        <div class="mb-5">
+          <label class="text-sm font-bold text-gray-300 block mb-3">
+            <i class="fas fa-sliders-h text-purple-400 mr-1"></i> ElevenLabs Expressiveness
+          </label>
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs text-gray-400 mb-1">
+                <span>Stability <span class="text-yellow-400">(lower = more emotion)</span></span>
+                <span id="stabilityVal">0.35</span>
+              </div>
+              <input type="range" id="elStability" min="0" max="1" step="0.05" value="0.35" class="w-full"
+                style="accent-color:#ff6b9d;background:none;border:none;padding:0"
+                oninput="document.getElementById('stabilityVal').textContent=parseFloat(this.value).toFixed(2);updateExpressivenessPreview()" />
+            </div>
+            <div>
+              <div class="flex justify-between text-xs text-gray-400 mb-1">
+                <span>Style <span class="text-green-400">(higher = more character)</span></span>
+                <span id="styleBoostVal">0.75</span>
+              </div>
+              <input type="range" id="elStyleBoost" min="0" max="1" step="0.05" value="0.75" class="w-full"
+                style="accent-color:#ff6b9d;background:none;border:none;padding:0"
+                oninput="document.getElementById('styleBoostVal').textContent=parseFloat(this.value).toFixed(2);updateExpressivenessPreview()" />
+            </div>
+            <div>
+              <div class="flex justify-between text-xs text-gray-400 mb-1">
+                <span>Similarity Boost</span>
+                <span id="similarityVal">0.60</span>
+              </div>
+              <input type="range" id="elSimilarity" min="0" max="1" step="0.05" value="0.60" class="w-full"
+                style="accent-color:#ff6b9d;background:none;border:none;padding:0"
+                oninput="document.getElementById('similarityVal').textContent=parseFloat(this.value).toFixed(2)" />
+            </div>
+          </div>
+          <div id="expressivenessPreview" class="mt-3 text-xs text-center py-2 rounded-xl font-bold"
+            style="background:rgba(255,107,157,0.1);color:#ff6b9d">
+            🔥 Very Expressive — Perfect for children!
+          </div>
+        </div>
+
+        <!-- Groq Personality toggle -->
+        <div class="mb-5">
+          <div class="flex items-center justify-between glass-light p-3 rounded-xl">
+            <div>
+              <div class="font-bold text-sm">Groq Personality Rewrite</div>
+              <div class="text-xs text-gray-500 mt-0.5">AI rewrites every line for max engagement</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer ml-4 flex-shrink-0">
+              <input type="checkbox" id="groqPersonalityToggle" class="sr-only" checked />
+              <div class="w-11 h-6 rounded-full transition" style="background:#ff6b9d"></div>
+              <div class="absolute left-0.5 top-0.5 bg-white w-5 h-5 rounded-full transition-all" style="transform:translateX(20px)"></div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Live test -->
+        <div class="mb-4">
+          <label class="text-sm font-bold text-gray-300 block mb-2">Test Your Voice Now</label>
+          <div class="flex gap-2">
+            <input type="text" id="voiceTestInput" class="flex-1 text-sm"
+              placeholder="Type something fun..." value="Wow, let's make some amazing music together!" />
+            <button onclick="testVoice()" class="btn-primary text-sm px-4 whitespace-nowrap" id="voiceTestBtn">
+              <i class="fas fa-play mr-1"></i> Test
+            </button>
+          </div>
+          <div id="voiceTestStatus" class="text-xs text-gray-500 mt-2 min-h-4"></div>
+        </div>
+
+        <button onclick="saveVoiceSettings()" class="btn-primary w-full">
+          <i class="fas fa-save mr-2"></i> Save Voice Settings
+        </button>
+      </div>
+
       <div class="glass p-6">
         <h3 class="font-black text-lg mb-4 flex items-center gap-2">
           <i class="fas fa-volume-up text-blue-400"></i> Audio Settings
@@ -3472,7 +3600,11 @@ async function createProfile() {
   if (r.success) {
     showToast(\`Profile for \${name} created! 🎉\`, '🎉', 'success');
     closeModal('addProfileModal');
-    loadProfiles();
+    await loadProfiles();
+    // Auto-select the newly created child so they appear immediately
+    if (r.data?.id) {
+      await selectChild(r.data.id);
+    }
   } else {
     showToast('Error: ' + r.error, '❌', 'error');
   }
@@ -4252,27 +4384,32 @@ const WEBCAM = {
         audio: false,
       });
       WEBCAM.stream = stream;
-      video.srcObject = stream;
-      video.style.transform = 'scaleX(-1)'; // mirror view — feels more natural
-      video.style.display = 'block';
+      (video as HTMLVideoElement).srcObject = stream;
+      (video as HTMLVideoElement).style.transform = 'scaleX(-1)'; // mirror — feels natural
+      (video as HTMLVideoElement).style.display = 'block';
       if (placeholder) placeholder.style.display = 'none';
 
-      // Start face presence detection loop
-      WEBCAM.startFaceDetection(video);
+      // Wait for video to actually be ready before starting detection
+      (video as HTMLVideoElement).onloadedmetadata = () => {
+        (video as HTMLVideoElement).play().catch(() => {});
+        WEBCAM.startFaceDetection(video);
+      };
 
       document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live';
-    } catch (err) {
-      // Camera permission denied or unavailable — show fallback
+    } catch (err: any) {
+      // Camera permission denied or unavailable — show friendly fallback
       console.warn('[Webcam] Camera not available:', err.message);
       if (placeholder) {
         placeholder.style.display = 'flex';
         placeholder.innerHTML = \`
-          <div class="text-center">
+          <div class="text-center p-2">
             <i class="fas fa-eye text-green-400 text-3xl mb-2 block"></i>
             <p class="text-xs text-green-400 font-bold">Session Active</p>
-            <p class="text-xs text-gray-500 mt-1">\${STATE.selectedChild?.name || ''} — camera permission needed for vision</p>
+            <p class="text-xs text-gray-500 mt-1">\${STATE.selectedChild?.name || 'Friend'}</p>
+            <p class="text-xs text-gray-600 mt-1">Allow camera for live monitoring</p>
           </div>\`;
       }
+      document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-yellow-400"></i>No Camera';
     }
   },
 
@@ -5847,6 +5984,243 @@ async function tryRestoreSession() {
   return false;
 }
 
+// ============================================================
+// VOICE PERSONALITY ENGINE — Frontend Controller
+// 3-Stage Pipeline: Groq Rewrite → Voice Select → ElevenLabs
+// ============================================================
+const VOICE_PERSONALITY = {
+  gender:      'female' as 'female' | 'male',
+  style:       'default' as 'default' | 'playful' | 'soothing' | 'energetic',
+  stability:   0.35,
+  styleBoost:  0.75,
+  similarity:  0.60,
+  groqEnabled: true,
+  _saved:      false,
+
+  // Voice name map for UI display
+  VOICE_NAMES: {
+    female: { default: 'Rachel (Warm Host)', playful: 'Matilda (Playful)', soothing: 'Bella (Soothing)', energetic: 'Elli (Energetic)' },
+    male:   { default: 'Charlie (Narrator)', playful: 'Will (Playful)',    soothing: 'Callum (Calm)',    energetic: 'Josh (Energetic)' },
+  } as Record<string, Record<string, string>>,
+};
+
+function setVoiceGender(g: 'female' | 'male') {
+  VOICE_PERSONALITY.gender = g;
+  // Update button visuals
+  const active   = 'border-color:#ff6b9d;background:rgba(255,107,157,0.15)';
+  const inactive = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+  const femBtn   = document.getElementById('voiceGenderFemale');
+  const malBtn   = document.getElementById('voiceGenderMale');
+  if (femBtn) femBtn.style.cssText = (g === 'female' ? active : inactive);
+  if (malBtn) malBtn.style.cssText = (g === 'male'   ? active : inactive);
+  updateExpressivenessPreview();
+}
+
+function setVoiceStyle(s: 'default' | 'playful' | 'soothing' | 'energetic') {
+  VOICE_PERSONALITY.style = s;
+  // Update style button visuals
+  ['default','playful','energetic','soothing'].forEach(id => {
+    const btn = document.getElementById('vstyle-' + id);
+    if (!btn) return;
+    btn.style.cssText = (id === s)
+      ? 'border-color:#ff6b9d;background:rgba(255,107,157,0.15)'
+      : 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+  });
+
+  // Adjust sliders to preset values for the style
+  const presets: Record<string, {stability:number; style:number; similarity:number}> = {
+    default:   { stability: 0.35, style: 0.75, similarity: 0.60 },
+    playful:   { stability: 0.30, style: 0.90, similarity: 0.60 },
+    energetic: { stability: 0.28, style: 0.95, similarity: 0.65 },
+    soothing:  { stability: 0.65, style: 0.35, similarity: 0.55 },
+  };
+  const p = presets[s] ?? presets.default;
+  VOICE_PERSONALITY.stability  = p.stability;
+  VOICE_PERSONALITY.styleBoost = p.style;
+  VOICE_PERSONALITY.similarity = p.similarity;
+
+  const stab = document.getElementById('elStability')  as HTMLInputElement;
+  const styl = document.getElementById('elStyleBoost') as HTMLInputElement;
+  const sim  = document.getElementById('elSimilarity') as HTMLInputElement;
+  if (stab) { stab.value = String(p.stability);  document.getElementById('stabilityVal')!.textContent  = p.stability.toFixed(2); }
+  if (styl) { styl.value = String(p.style);      document.getElementById('styleBoostVal')!.textContent = p.style.toFixed(2); }
+  if (sim)  { sim.value  = String(p.similarity); document.getElementById('similarityVal')!.textContent = p.similarity.toFixed(2); }
+
+  updateExpressivenessPreview();
+}
+
+function updateExpressivenessPreview() {
+  // Read live slider values
+  const stab  = parseFloat((document.getElementById('elStability')  as HTMLInputElement)?.value ?? '0.35');
+  const style = parseFloat((document.getElementById('elStyleBoost') as HTMLInputElement)?.value ?? '0.75');
+  VOICE_PERSONALITY.stability  = stab;
+  VOICE_PERSONALITY.styleBoost = style;
+
+  const el = document.getElementById('expressivenessPreview');
+  if (!el) return;
+
+  const voiceName = VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender][VOICE_PERSONALITY.style] ?? 'Rachel';
+
+  let label = '';
+  let color = '#ff6b9d';
+  if (stab < 0.32 && style > 0.85) {
+    label = '🔥 ULTRA Expressive — Maximum character!';  color = '#ff4444';
+  } else if (stab < 0.45 && style > 0.65) {
+    label = '✨ Very Expressive — Perfect for children!'; color = '#ff6b9d';
+  } else if (stab < 0.55) {
+    label = '😊 Expressive — Warm and engaging';          color = '#f59e0b';
+  } else if (stab > 0.65) {
+    label = '🌙 Calm & Soothing — Great for lullabies';  color = '#60a5fa';
+  } else {
+    label = '⭐ Balanced — Natural speech';               color = '#a78bfa';
+  }
+
+  el.textContent = label + '  |  ' + voiceName;
+  el.style.color = color;
+  el.style.background = color + '22';
+}
+
+async function testVoice() {
+  const input = document.getElementById('voiceTestInput') as HTMLInputElement;
+  const status = document.getElementById('voiceTestStatus');
+  const btn    = document.getElementById('voiceTestBtn') as HTMLButtonElement;
+  const text   = input?.value?.trim() || 'Wow, let\'s make some amazing music together!';
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Generating...'; }
+  if (status) status.textContent = '⏳ Calling Groq Personality + ElevenLabs...';
+
+  try {
+    // Post directly via speakText so it goes through the full 3-stage pipeline
+    const emotion: TTSEmotion = VOICE_PERSONALITY.style === 'soothing' ? 'calm'
+                               : VOICE_PERSONALITY.style === 'energetic' ? 'excited'
+                               : VOICE_PERSONALITY.style === 'playful' ? 'encouraging'
+                               : 'friendly';
+
+    await speakText(text, emotion as any);
+
+    if (status) status.textContent = '✅ Playing! Stability=' + VOICE_PERSONALITY.stability.toFixed(2)
+      + ' Style=' + VOICE_PERSONALITY.styleBoost.toFixed(2)
+      + ' (' + VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender][VOICE_PERSONALITY.style] + ')';
+  } catch (e: any) {
+    if (status) status.textContent = '❌ Error: ' + (e?.message || 'TTS failed');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-play mr-1"></i> Test'; }
+  }
+}
+
+async function saveVoiceSettings() {
+  // Read final slider values
+  VOICE_PERSONALITY.stability  = parseFloat((document.getElementById('elStability')  as HTMLInputElement)?.value ?? '0.35');
+  VOICE_PERSONALITY.styleBoost = parseFloat((document.getElementById('elStyleBoost') as HTMLInputElement)?.value ?? '0.75');
+  VOICE_PERSONALITY.similarity = parseFloat((document.getElementById('elSimilarity') as HTMLInputElement)?.value ?? '0.60');
+  VOICE_PERSONALITY.groqEnabled = (document.getElementById('groqPersonalityToggle') as HTMLInputElement)?.checked ?? true;
+
+  try {
+    const r = await api('PUT', '/tts/prefs', {
+      voiceGender:    VOICE_PERSONALITY.gender,
+      voiceStyle:     VOICE_PERSONALITY.style,
+      stability:      VOICE_PERSONALITY.stability,
+      styleBoost:     VOICE_PERSONALITY.styleBoost,
+      similarity:     VOICE_PERSONALITY.similarity,
+      groqPersonality: VOICE_PERSONALITY.groqEnabled,
+    });
+
+    if (r.success !== false) {
+      showToast('Voice settings saved! ' + VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender][VOICE_PERSONALITY.style], '🎤', 'success');
+      VOICE_PERSONALITY._saved = true;
+
+      // Update engine status badge
+      const statusEl = document.getElementById('voiceEngineStatus');
+      if (statusEl) {
+        statusEl.textContent = (VOICE_PERSONALITY.groqEnabled ? '🧠 Groq + ' : '') + 'ElevenLabs Active';
+        statusEl.style.color = '#4ade80';
+        statusEl.style.background = 'rgba(0,200,100,0.15)';
+      }
+    } else {
+      showToast('Saved locally (API unavailable)', '💾', 'info');
+    }
+  } catch {
+    showToast('Saved locally', '💾', 'info');
+  }
+
+  // Always persist to localStorage as backup
+  localStorage.setItem('mb_voice_personality', JSON.stringify({
+    gender:      VOICE_PERSONALITY.gender,
+    style:       VOICE_PERSONALITY.style,
+    stability:   VOICE_PERSONALITY.stability,
+    styleBoost:  VOICE_PERSONALITY.styleBoost,
+    similarity:  VOICE_PERSONALITY.similarity,
+    groqEnabled: VOICE_PERSONALITY.groqEnabled,
+  }));
+}
+
+async function loadVoiceSettings() {
+  // 1. Try loading from API
+  try {
+    const r = await api('GET', '/tts/prefs');
+    if (r.success !== false && r.data) {
+      const d = r.data;
+      if (d.voiceGender)  VOICE_PERSONALITY.gender      = d.voiceGender;
+      if (d.voiceStyle)   VOICE_PERSONALITY.style       = d.voiceStyle;
+      if (d.stability  != null) VOICE_PERSONALITY.stability  = d.stability;
+      if (d.styleBoost != null) VOICE_PERSONALITY.styleBoost = d.styleBoost;
+      if (d.similarity != null) VOICE_PERSONALITY.similarity = d.similarity;
+      if (d.groqPersonality != null) VOICE_PERSONALITY.groqEnabled = d.groqPersonality;
+    }
+  } catch {
+    // 2. Fall back to localStorage
+    try {
+      const saved = JSON.parse(localStorage.getItem('mb_voice_personality') || '{}');
+      if (saved.gender)    VOICE_PERSONALITY.gender      = saved.gender;
+      if (saved.style)     VOICE_PERSONALITY.style       = saved.style;
+      if (saved.stability  != null) VOICE_PERSONALITY.stability  = saved.stability;
+      if (saved.styleBoost != null) VOICE_PERSONALITY.styleBoost = saved.styleBoost;
+      if (saved.similarity != null) VOICE_PERSONALITY.similarity = saved.similarity;
+      if (saved.groqEnabled != null) VOICE_PERSONALITY.groqEnabled = saved.groqEnabled;
+    } catch {}
+  }
+
+  // 3. Apply loaded values to UI
+  setVoiceGender(VOICE_PERSONALITY.gender);
+  setVoiceStyle(VOICE_PERSONALITY.style);
+
+  const stab = document.getElementById('elStability')  as HTMLInputElement;
+  const styl = document.getElementById('elStyleBoost') as HTMLInputElement;
+  const sim  = document.getElementById('elSimilarity') as HTMLInputElement;
+  const tog  = document.getElementById('groqPersonalityToggle') as HTMLInputElement;
+
+  if (stab) { stab.value = String(VOICE_PERSONALITY.stability);  document.getElementById('stabilityVal')!.textContent  = VOICE_PERSONALITY.stability.toFixed(2); }
+  if (styl) { styl.value = String(VOICE_PERSONALITY.styleBoost); document.getElementById('styleBoostVal')!.textContent = VOICE_PERSONALITY.styleBoost.toFixed(2); }
+  if (sim)  { sim.value  = String(VOICE_PERSONALITY.similarity); document.getElementById('similarityVal')!.textContent = VOICE_PERSONALITY.similarity.toFixed(2); }
+  if (tog)  { tog.checked = VOICE_PERSONALITY.groqEnabled; }
+
+  updateExpressivenessPreview();
+
+  // 4. Update engine status badge
+  const statusEl = document.getElementById('voiceEngineStatus');
+  if (statusEl) {
+    statusEl.textContent = (VOICE_PERSONALITY.groqEnabled ? '🧠 Groq + ' : '') + 'ElevenLabs';
+    statusEl.style.color = '#4ade80';
+  }
+}
+
+// ── BehaviorTone → TTSEmotion bridge ──────────────────────────
+// Groq returns BehaviorTone values; speakText needs TTSEmotion.
+type TTSEmotion = 'friendly'|'excited'|'singing'|'calm'|'encouraging'|'surprised'|'whisper';
+function toneToEmotion(tone: string): TTSEmotion {
+  const map: Record<string,TTSEmotion> = {
+    excited:      'excited',
+    celebratory:  'excited',
+    playful:      'encouraging',
+    warm:         'friendly',
+    encouraging:  'encouraging',
+    soothing:     'calm',
+    gentle:       'calm',
+    curious:      'friendly',
+  };
+  return map[tone] ?? 'friendly';
+}
+
 async function init() {
   // Load voices for TTS
   if ('speechSynthesis' in window) {
@@ -5869,6 +6243,9 @@ async function init() {
   BILLING.renderSettingsPlans();
   BILLING.updateTTSProviderUI();
   GATE.refresh();
+
+  // Load voice personality settings (gender, style, sliders)
+  await loadVoiceSettings();
 
   // Load profiles on start
   const r = await api('GET', '/profiles');
