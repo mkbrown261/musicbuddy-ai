@@ -968,11 +968,12 @@ function getMainHTML(): string {
         <div>
           <label class="text-xs text-gray-400 font-bold block mb-1">Avatar</label>
           <div class="flex gap-2 flex-wrap">
-            {['🐰 bunny','🦁 lion','⭐ star','🐻 bear','🦊 fox','🐧 penguin'].map(a => {
-              const [emoji, val] = a.split(' ');
-              return \`<button type="button" onclick="selectAvatar('\${val}',this)" 
-                class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="\${val}">\${emoji}</button>\`;
-            }).join('')}
+            <button type="button" onclick="selectAvatar('bunny',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="bunny">🐰</button>
+            <button type="button" onclick="selectAvatar('lion',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="lion">🦁</button>
+            <button type="button" onclick="selectAvatar('star',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="star">⭐</button>
+            <button type="button" onclick="selectAvatar('bear',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="bear">🐻</button>
+            <button type="button" onclick="selectAvatar('fox',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="fox">🦊</button>
+            <button type="button" onclick="selectAvatar('penguin',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="penguin">🐧</button>
           </div>
           <input type="hidden" id="newAvatar" value="bunny" />
         </div>
@@ -1665,7 +1666,7 @@ async function detectBackground() {
     STATE.bgSong = song;
     document.getElementById('bgDetected').classList.remove('hidden');
     document.getElementById('bgDetectedName').textContent = \`"\${song}" will be used as seed\`;
-    showToast(\`"${song}" set as music seed! 🎵\`, '🎵', 'success');
+    showToast(\`"\${song}" set as music seed! 🎵\`, '🎵', 'success');
   }
 }
 
