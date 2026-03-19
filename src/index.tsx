@@ -331,6 +331,80 @@ function getMainHTML(): string {
       animation: gazeGlow 1s ease-in-out infinite;
     }
     @keyframes gazeGlow { 0%,100%{box-shadow:0 0 10px rgba(107,203,119,0.9)} 50%{box-shadow:0 0 20px rgba(107,203,119,1)} }
+
+    /* ── Phase 4: Reward & Engagement Animations ── */
+    @keyframes confettiFall {
+      0%   { transform: translateY(-20px) rotate(0deg) scale(1); opacity: 1; }
+      100% { transform: translateY(100vh) rotate(720deg) scale(0.4); opacity: 0; }
+    }
+    @keyframes sparklePopIn {
+      0%   { transform: scale(0) rotate(0deg); opacity: 0; }
+      60%  { transform: scale(1.4) rotate(180deg); opacity: 1; }
+      100% { transform: scale(1) rotate(360deg); opacity: 0; }
+    }
+    @keyframes megaBounce {
+      0%,100% { transform: scale(1); }
+      15%  { transform: scale(1.35) rotate(-3deg); }
+      30%  { transform: scale(0.9) rotate(2deg); }
+      45%  { transform: scale(1.2) rotate(-2deg); }
+      60%  { transform: scale(0.95); }
+      75%  { transform: scale(1.1); }
+    }
+    @keyframes levelUpFlash {
+      0%,100% { opacity: 0; transform: scale(0.5) translateY(20px); }
+      20%,80% { opacity: 1; transform: scale(1.05) translateY(0); }
+    }
+    @keyframes starBurst {
+      0%   { transform: scale(0) rotate(0); opacity: 1; }
+      100% { transform: scale(2.5) rotate(45deg); opacity: 0; }
+    }
+    @keyframes xpFlyUp {
+      0%   { transform: translateY(0) scale(1); opacity: 1; }
+      100% { transform: translateY(-80px) scale(1.4); opacity: 0; }
+    }
+    @keyframes characterDance {
+      0%,100% { transform: rotate(0deg) scale(1); }
+      25%  { transform: rotate(-12deg) scale(1.1); }
+      50%  { transform: rotate(0deg) scale(1.2); }
+      75%  { transform: rotate(12deg) scale(1.1); }
+    }
+    @keyframes shakeReject {
+      0%,100% { transform: translateX(0); }
+      20%  { transform: translateX(-8px); }
+      40%  { transform: translateX(8px); }
+      60%  { transform: translateX(-5px); }
+      80%  { transform: translateX(5px); }
+    }
+    @keyframes pulseGlow {
+      0%,100% { box-shadow: 0 0 0 0 rgba(255,107,157,0); }
+      50%  { box-shadow: 0 0 30px 10px rgba(255,107,157,0.6); }
+    }
+    .reward-bounce { animation: megaBounce 0.7s cubic-bezier(0.36,0.07,0.19,0.97); }
+    .character-dance { animation: characterDance 0.6s ease-in-out infinite; }
+    .pulse-glow { animation: pulseGlow 0.8s ease-in-out 3; }
+    .shake { animation: shakeReject 0.4s ease-in-out; }
+
+    /* XP bar */
+    .xp-bar-fill { background: linear-gradient(90deg, #ffd700, #ff6b9d, #c44dbb); transition: width 0.8s cubic-bezier(0.34,1.56,0.64,1); }
+
+    /* Level badge */
+    .level-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #ffd700, #ff8c00);
+      color: #1a0a2e; font-weight: 900; font-size: 11px;
+      padding: 2px 8px; border-radius: 999px;
+      box-shadow: 0 2px 8px rgba(255,215,0,0.5);
+    }
+
+    /* Mini-game area */
+    .minigame-btn {
+      background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 16px; padding: 14px 20px; font-weight: 900; font-size: 1.1rem;
+      cursor: pointer; transition: all 0.15s; color: white; text-align: center;
+    }
+    .minigame-btn:active, .minigame-btn.hit { background: rgba(255,107,157,0.4); border-color: #ff6b9d; transform: scale(0.95); }
+    .minigame-btn.correct { background: rgba(107,203,119,0.4); border-color: #6bcb77; }
+    .minigame-btn.wrong { background: rgba(255,80,80,0.3); border-color: #ff5050; }
   </style>
 </head>
 <body class="bg-animated min-h-screen">
@@ -339,6 +413,34 @@ function getMainHTML(): string {
 <div class="stars" id="stars"></div>
 <div id="musicNotes"></div>
 
+<!-- ═══ REWARD OVERLAY LAYER (sits above everything) ═══ -->
+<div id="rewardOverlay" style="position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden"></div>
+
+<!-- ═══ LEVEL-UP MODAL ═══ -->
+<div id="levelUpModal" class="hidden" style="position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px)">
+  <div class="glass p-8 text-center max-w-sm mx-4" style="animation:levelUpFlash 1.2s ease-out forwards">
+    <div class="text-7xl mb-3" id="levelUpEmoji">⭐</div>
+    <div class="text-4xl font-black text-yellow-400 mb-1" id="levelUpTitle">LEVEL UP!</div>
+    <div class="text-xl font-black text-white mb-2" id="levelUpSubtitle">You reached Level 2!</div>
+    <div class="text-sm text-purple-300 mb-5" id="levelUpDesc">Amazing work! Keep going!</div>
+    <button onclick="closeLevelUp()" class="btn-primary px-8">Let's keep going!</button>
+  </div>
+</div>
+
+<!-- ═══ MINI-GAME MODAL ═══ -->
+<div id="miniGameModal" class="hidden" style="position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);backdrop-filter:blur(8px)">
+  <div class="glass p-6 max-w-sm mx-4 w-full">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-black text-xl" id="miniGameTitle">Repeat After Me!</h2>
+      <button onclick="closeMiniGame()" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+    </div>
+    <div id="miniGameContent" class="min-h-32"></div>
+    <div class="mt-4 flex justify-between items-center">
+      <div class="text-xs text-gray-400">Score: <span id="mgScore" class="font-black text-yellow-400">0</span></div>
+      <div class="text-xs text-gray-400">Round: <span id="mgRound" class="font-black text-pink-400">1</span>/3</div>
+    </div>
+  </div>
+</div>
 <!-- Toast -->
 <div id="toast"><span id="toastIcon">✨</span> <span id="toastMsg"></span></div>
 
@@ -453,9 +555,22 @@ function getMainHTML(): string {
                 <div class="w-full h-full rounded-full bg-gradient-to-br from-pink-400 to-purple-600 flex items-center justify-center text-2xl" id="childAvatar">🐰</div>
               </div>
               <div>
-                <div class="font-black text-lg" id="childNameDisplay">-</div>
+                <div class="flex items-center gap-2">
+                  <div class="font-black text-lg" id="childNameDisplay">-</div>
+                  <span class="level-badge" id="levelBadge">Lv 1</span>
+                </div>
                 <div class="text-xs text-gray-400" id="childAgeDisplay">Age -</div>
                 <div class="text-xs text-purple-300 font-bold" id="childStyleDisplay">-</div>
+              </div>
+            </div>
+            <!-- XP Bar -->
+            <div class="mb-3">
+              <div class="flex justify-between text-xs text-gray-400 mb-1">
+                <span>XP</span>
+                <span id="xpText">0 / 100</span>
+              </div>
+              <div class="h-2 rounded-full bg-white bg-opacity-10 overflow-hidden">
+                <div class="xp-bar-fill h-full rounded-full" id="xpBar" style="width:0%"></div>
               </div>
             </div>
             <div id="favoriteSongsDisplay" class="flex flex-wrap gap-1 mb-3"></div>
@@ -465,6 +580,18 @@ function getMainHTML(): string {
               </button>
               <button onclick="stopSession()" class="btn-danger text-sm w-full hidden" id="stopBtn">
                 <i class="fas fa-stop mr-1"></i> Stop
+              </button>
+            </div>
+            <!-- Mini-games -->
+            <div class="mt-2 grid grid-cols-3 gap-1">
+              <button onclick="startMiniGame('repeat')" class="song-pill text-xs justify-center py-1.5" title="Repeat After Me">
+                🎤 Repeat
+              </button>
+              <button onclick="startMiniGame('clap')" class="song-pill text-xs justify-center py-1.5" title="Clap Game">
+                👏 Clap
+              </button>
+              <button onclick="startMiniGame('rhythm')" class="song-pill text-xs justify-center py-1.5" title="Rhythm Match">
+                🥁 Rhythm
               </button>
             </div>
           </div>
@@ -2277,6 +2404,538 @@ const FAMILY = {
   },
 };
 
+// ══════════════════════════════════════════════════════════
+// PHASE 4: REWARD ENGINE
+// All reward triggers flow through Intent Layer → REWARDS.fire()
+// Action Layer is never touched directly from here
+// ══════════════════════════════════════════════════════════
+const REWARDS = {
+  // ── XP + Level System ──────────────────────────────────
+  XP_PER_LEVEL: 100,
+  LEVEL_THRESHOLDS: [0,100,220,360,520,700,900,1120,1360,1620,2000],
+  xp: 0,
+  level: 1,
+  rewardHistory: {},   // { rewardType: { fires: n, avgEngagementDelta: x } }
+  surpriseCountdown: Math.floor(Math.random() * 5) + 3, // surprise every 3-7 rewards
+
+  addXP(amount, label) {
+    this.xp += amount;
+    const newLevel = this.computeLevel();
+    // Fly-up XP label
+    this.spawnXPLabel('+' + amount + ' XP');
+    // Update bar
+    this.updateXPBar();
+    if (newLevel > this.level) {
+      this.level = newLevel;
+      setTimeout(() => this.showLevelUp(), 600);
+    }
+  },
+
+  computeLevel() {
+    for (let i = this.LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+      if (this.xp >= this.LEVEL_THRESHOLDS[i]) return i + 1;
+    }
+    return 1;
+  },
+
+  updateXPBar() {
+    const lvl = Math.min(this.level, 10);
+    const levelStart = this.LEVEL_THRESHOLDS[lvl - 1] || 0;
+    const levelEnd = this.LEVEL_THRESHOLDS[lvl] || this.LEVEL_THRESHOLDS[this.LEVEL_THRESHOLDS.length-1];
+    const pct = Math.min(100, ((this.xp - levelStart) / (levelEnd - levelStart)) * 100);
+    const bar = document.getElementById('xpBar');
+    const txt = document.getElementById('xpText');
+    const badge = document.getElementById('levelBadge');
+    if (bar) bar.style.width = pct + '%';
+    if (txt) txt.textContent = (this.xp - levelStart) + ' / ' + (levelEnd - levelStart);
+    if (badge) badge.textContent = 'Lv ' + this.level;
+  },
+
+  showLevelUp() {
+    const modal = document.getElementById('levelUpModal');
+    if (!modal) return;
+    const emojis = ['⭐','🌟','💫','🏆','👑','🎯','🎪','🎭','🎨','🚀'];
+    const names = ['Music Explorer','Rhythm Rider','Beat Maker','Melody Maker','Harmony Hero',
+                   'Song Superstar','Groove Master','Music Wizard','Sound Champion','Legend'];
+    document.getElementById('levelUpEmoji').textContent = emojis[Math.min(this.level-1, emojis.length-1)];
+    document.getElementById('levelUpTitle').textContent = 'LEVEL UP!';
+    document.getElementById('levelUpSubtitle').textContent = \`You reached Level \${this.level}!\`;
+    document.getElementById('levelUpDesc').textContent = names[Math.min(this.level-2, names.length-1)] || 'Amazing!';
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+    // Big sound
+    this.playMajorRewardSound();
+    this.spawnConfetti(60);
+    // Speak celebration
+    const name = STATE.selectedChild?.name || 'friend';
+    speakText(\`Yaaayyy! Level \${this.level}! You are incredible, \${name}!\`);
+  },
+
+  // ── Intent-driven fire method ───────────────────────────
+  // tier: 'micro' | 'medium' | 'major' | 'surprise'
+  fire(tier, context = {}) {
+    const engBefore = STATE.engScore;
+    const name = STATE.selectedChild?.name || 'friend';
+
+    if (tier === 'micro') {
+      this.playMicroSound();
+      this.spawnSparkles(6);
+      this.addXP(5, 'micro');
+    } else if (tier === 'medium') {
+      this.playMediumSound();
+      this.spawnSparkles(14);
+      this.bounceMusicBuddy();
+      this.addXP(15, 'medium');
+    } else if (tier === 'major') {
+      this.playMajorRewardSound();
+      this.spawnConfetti(35);
+      this.bounceMusicBuddy();
+      this.pulseGlow();
+      this.addXP(35, 'major');
+    } else if (tier === 'surprise') {
+      this.playSurpriseSound();
+      this.spawnConfetti(50);
+      this.bounceMusicBuddy();
+      this.addXP(25, 'surprise');
+      // Surprise voice line
+      const surprises = [
+        \`SURPRISE! You are amazing, \${name}!\`,
+        \`Oh wow! I did not see that coming! You are incredible!\`,
+        \`Special bonus time, \${name}! You earned it!\`,
+      ];
+      speakText(surprises[Math.floor(Math.random() * surprises.length)]);
+    }
+
+    // Track reward effectiveness
+    const key = tier + (context.trigger || '');
+    if (!this.rewardHistory[key]) this.rewardHistory[key] = { fires: 0, totalEng: 0 };
+    this.rewardHistory[key].fires++;
+
+    // Surprise countdown
+    this.surpriseCountdown--;
+    if (this.surpriseCountdown <= 0) {
+      this.surpriseCountdown = Math.floor(Math.random() * 5) + 3;
+      setTimeout(() => this.fire('surprise'), 800);
+    }
+  },
+
+  // ── Sound synthesizers (Web Audio, <100ms) ─────────────
+  playMicroSound() {
+    if (!AUDIO.ctx) { AUDIO.init(); AUDIO.resume(); } else AUDIO.resume();
+    const ctx = AUDIO.ctx; const now = ctx.currentTime;
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(AUDIO.masterGain || ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
+    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.start(now); osc.stop(now + 0.12);
+  },
+
+  playMediumSound() {
+    if (!AUDIO.ctx) { AUDIO.init(); AUDIO.resume(); } else AUDIO.resume();
+    const ctx = AUDIO.ctx; const now = ctx.currentTime;
+    // Chord: root + third + fifth
+    [[523, 0], [659, 0.02], [784, 0.04]].forEach(([freq, offset]) => {
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(AUDIO.masterGain || ctx.destination);
+      osc.type = 'triangle'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.18, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.35);
+      osc.start(now + offset); osc.stop(now + offset + 0.35);
+    });
+  },
+
+  playMajorRewardSound() {
+    if (!AUDIO.ctx) { AUDIO.init(); AUDIO.resume(); } else AUDIO.resume();
+    const ctx = AUDIO.ctx; const now = ctx.currentTime;
+    // Fanfare: ascending arpeggio + big chord
+    const notes = [523, 659, 784, 1047];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(AUDIO.masterGain || ctx.destination);
+      osc.type = 'sawtooth'; osc.frequency.value = freq;
+      const t = now + i * 0.08;
+      gain.gain.setValueAtTime(0.0, t);
+      gain.gain.linearRampToValueAtTime(0.2, t + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      osc.start(t); osc.stop(t + 0.5);
+    });
+    // Big boom at end
+    setTimeout(() => {
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(AUDIO.masterGain || ctx.destination);
+      osc.type = 'sine'; osc.frequency.setValueAtTime(200, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.3);
+    }, notes.length * 80 + 50);
+  },
+
+  playSurpriseSound() {
+    if (!AUDIO.ctx) { AUDIO.init(); AUDIO.resume(); } else AUDIO.resume();
+    const ctx = AUDIO.ctx; const now = ctx.currentTime;
+    // Magical rising glide
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(AUDIO.masterGain || ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, now);
+    osc.frequency.exponentialRampToValueAtTime(1600, now + 0.3);
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.start(now); osc.stop(now + 0.35);
+    this.playMediumSound();
+  },
+
+  // ── Visual reward effects ──────────────────────────────
+  spawnSparkles(count) {
+    const overlay = document.getElementById('rewardOverlay');
+    if (!overlay) return;
+    for (let i = 0; i < count; i++) {
+      const s = document.createElement('div');
+      const x = 10 + Math.random() * 80;
+      const y = 20 + Math.random() * 60;
+      const size = 8 + Math.random() * 18;
+      const colors = ['#ffd700','#ff6b9d','#c44dbb','#4d96ff','#6bcb77','#fff'];
+      s.style.cssText = \`position:absolute;left:\${x}%;top:\${y}%;width:\${size}px;height:\${size}px;
+        border-radius:50%;background:\${colors[Math.floor(Math.random()*colors.length)]};
+        animation:sparklePopIn \${0.4 + Math.random()*0.4}s ease-out forwards;
+        animation-delay:\${Math.random()*0.2}s;\`;
+      overlay.appendChild(s);
+      setTimeout(() => s.remove(), 900);
+    }
+  },
+
+  spawnConfetti(count) {
+    const overlay = document.getElementById('rewardOverlay');
+    if (!overlay) return;
+    const shapes = ['▲','●','■','★','♦'];
+    const colors = ['#ffd700','#ff6b9d','#c44dbb','#4d96ff','#6bcb77','#ff8c00','#fff'];
+    for (let i = 0; i < count; i++) {
+      const c = document.createElement('div');
+      const x = Math.random() * 100;
+      const dur = 1.8 + Math.random() * 1.4;
+      c.textContent = shapes[Math.floor(Math.random()*shapes.length)];
+      c.style.cssText = \`position:absolute;left:\${x}%;top:-30px;font-size:\${10+Math.random()*14}px;
+        color:\${colors[Math.floor(Math.random()*colors.length)]};
+        animation:confettiFall \${dur}s ease-in forwards;
+        animation-delay:\${Math.random()*0.6}s;\`;
+      overlay.appendChild(c);
+      setTimeout(() => c.remove(), (dur + 0.8) * 1000);
+    }
+  },
+
+  spawnXPLabel(text) {
+    const overlay = document.getElementById('rewardOverlay');
+    if (!overlay) return;
+    const el = document.createElement('div');
+    el.textContent = text;
+    el.style.cssText = \`position:absolute;left:50%;top:60%;transform:translateX(-50%);
+      font-weight:900;font-size:1.3rem;color:#ffd700;
+      text-shadow:0 0 10px rgba(255,215,0,0.8);
+      animation:xpFlyUp 0.9s ease-out forwards;\`;
+    overlay.appendChild(el);
+    setTimeout(() => el.remove(), 1000);
+  },
+
+  bounceMusicBuddy() {
+    const el = document.getElementById('nowPlayingEmoji');
+    if (!el) return;
+    el.classList.remove('reward-bounce');
+    void el.offsetWidth; // reflow
+    el.classList.add('reward-bounce');
+    setTimeout(() => el.classList.remove('reward-bounce'), 800);
+  },
+
+  pulseGlow() {
+    const el = document.querySelector('.player-container');
+    if (!el) return;
+    el.classList.remove('pulse-glow');
+    void el.offsetWidth;
+    el.classList.add('pulse-glow');
+    setTimeout(() => el.classList.remove('pulse-glow'), 3000);
+  },
+
+  // ── Dopamine loop trigger ───────────────────────────────
+  // Called from Intent Layer after every completed interaction
+  triggerDopamineLoop(engagementScore, trigger) {
+    const tier = engagementScore >= 70 ? 'major'
+               : engagementScore >= 40 ? 'medium' : 'micro';
+    this.fire(tier, { trigger });
+  },
+};
+
+// ══════════════════════════════════════════════════════════
+// PHASE 4: ENHANCED EXPRESSOR
+// Full performance scripting — no more robotic delivery
+// ══════════════════════════════════════════════════════════
+const PERFORMER = {
+  // Converts text + energy into an emotionally alive performance script
+  perform(text, energyLevel, context = {}) {
+    let t = text;
+
+    // 1. Energy-matched openers
+    if (context.isReward) {
+      const openers = energyLevel === 'high'
+        ? ['YAAAYYY! ', 'Oh WOW! ', 'INCREDIBLE! ']
+        : energyLevel === 'medium'
+        ? ['Wooooo! ', 'Yes yes yes! ', 'Awesome! ']
+        : ['Good job! ', 'Well done! ', 'Great! '];
+      t = openers[Math.floor(Math.random() * openers.length)] + t;
+    }
+
+    // 2. Pattern substitutions — inject pauses + emphasis
+    t = t
+      // Elongations
+      .replace(/\bYay\b/gi, 'Yaaayyy')
+      .replace(/\bWoohoo\b/gi, 'Woooo hoooo')
+      .replace(/\bWow\b/gi, 'Wooooow')
+      .replace(/\bYes\b/gi, 'Ohhhh yes')
+      .replace(/\bAmazing\b/gi, 'A-MAZING')
+      .replace(/\bIncredible\b/gi, 'in-CRE-dible')
+      .replace(/\bSo good\b/gi, 'SO... good')
+      .replace(/\bLet's go\b/gi, 'Let us GOOOOO')
+      // Pause injection after sentences
+      .replace(/\.\s+/g, '... ')
+      .replace(/!\s+(?=[A-Z])/g, '! ... ')
+      // Capitalize emphasis words
+      .replace(/\bsupER\b/gi, 'SUPER')
+      .replace(/\bso fun\b/gi, 'SO fun')
+      .replace(/\bmore\b/g, 'MORE')
+      // Energy-matched suffix
+      .trim();
+
+    // 3. Energy-matched suffix
+    if (energyLevel === 'high' && !t.endsWith('!')) t += '!!';
+    else if (energyLevel === 'low' && t.endsWith('!')) t = t.replace(/!+$/, '.');
+
+    return t;
+  },
+
+  // Character signature phrases — Music Buddy's personality
+  signature: {
+    greetHigh: (n) => \`Yaaayyy! \${n} is HERE! I have been waiting for you! Let us make some MUSIC!\`,
+    greetMed:  (n) => \`Hey hey hey! \${n}! So happy to see you! Ready for some fun?\`,
+    greetLow:  (n) => \`Hello \${n}! I am so glad you are here. Ready for some gentle music?\`,
+    joyHigh:   (n) => \`OH WOW! Look at you \${n}! You are on FIRE today! Let us GOOOOO!\`,
+    joyMed:    (n) => \`Yaaayyy! \${n} you are doing SO great! I love your energy!\`,
+    joyLow:    (n) => \`Beautiful, \${n}. You are doing so well. I am proud of you.\`,
+    transHigh: (n) => \`Ready \${n}? THREE... TWO... ONE... let us GOOOOO!\`,
+    transMed:  (n) => \`Okay \${n}! Get those ears ready... here it comes!\`,
+    transLow:  (n) => \`Ready \${n}? Something special is coming just for you...\`,
+    afterHigh: (n) => \`YAAAYYY! That was INCREDIBLE \${n}! Did you feel that energy?!\`,
+    afterMed:  (n) => \`Woohoo! That was SO fun \${n}! Want to hear another one?\`,
+    afterLow:  (n) => \`That was beautiful, \${n}. Did you like that? Ready for more?\`,
+  },
+
+  getGreeting(name, energy) {
+    const k = energy === 'high' ? 'greetHigh' : energy === 'low' ? 'greetLow' : 'greetMed';
+    return this.signature[k](name);
+  },
+  getJoy(name, energy) {
+    const k = energy === 'high' ? 'joyHigh' : energy === 'low' ? 'joyLow' : 'joyMed';
+    return this.signature[k](name);
+  },
+  getTransition(name, energy) {
+    const k = energy === 'high' ? 'transHigh' : energy === 'low' ? 'transLow' : 'transMed';
+    return this.signature[k](name);
+  },
+  getAfterSong(name, energy) {
+    const k = energy === 'high' ? 'afterHigh' : energy === 'low' ? 'afterLow' : 'afterMed';
+    return this.signature[k](name);
+  },
+};
+
+// ══════════════════════════════════════════════════════════
+// PHASE 4: MINI-GAME ENGINE
+// Call-and-response, clap game, rhythm match
+// ══════════════════════════════════════════════════════════
+const MINIGAME = {
+  active: false,
+  type: null,
+  score: 0,
+  round: 0,
+  maxRounds: 3,
+  sequence: [],
+  playerSeq: [],
+  beatTimer: null,
+
+  start(type) {
+    this.active = true;
+    this.type = type;
+    this.score = 0;
+    this.round = 1;
+    this.sequence = [];
+    this.playerSeq = [];
+
+    const modal = document.getElementById('miniGameModal');
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+    document.getElementById('mgScore').textContent = '0';
+    document.getElementById('mgRound').textContent = '1';
+
+    if (type === 'repeat') this.startRepeatGame();
+    else if (type === 'clap') this.startClapGame();
+    else if (type === 'rhythm') this.startRhythmGame();
+  },
+
+  startRepeatGame() {
+    document.getElementById('miniGameTitle').textContent = 'Repeat After Me!';
+    const phrases = ['A B C!', 'Clap clap clap!', 'Do re mi!', 'La la la!', 'Boom boom pow!'];
+    const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+    document.getElementById('miniGameContent').innerHTML = \`
+      <div class="text-center space-y-4">
+        <div class="text-2xl font-black text-yellow-300" id="mgPhrase">Listen...</div>
+        <div class="text-xs text-gray-400">I will say a phrase. Then you say it!</div>
+        <div class="grid grid-cols-2 gap-3 mt-4">
+          <button onclick="MINIGAME.playerSay('correct')" class="minigame-btn">
+            <div class="text-3xl mb-1">✅</div>
+            <div class="text-sm">I said it!</div>
+          </button>
+          <button onclick="MINIGAME.playerSay('wrong')" class="minigame-btn">
+            <div class="text-3xl mb-1">❌</div>
+            <div class="text-sm">Not yet</div>
+          </button>
+        </div>
+      </div>\`;
+    setTimeout(async () => {
+      document.getElementById('mgPhrase').textContent = phrase;
+      await speakText(phrase);
+      document.getElementById('mgPhrase').textContent = 'Now YOU say: ' + phrase;
+    }, 500);
+  },
+
+  startClapGame() {
+    document.getElementById('miniGameTitle').textContent = 'Clap the Beat!';
+    const target = 3 + Math.floor(Math.random() * 3);
+    this.sequence = [target];
+    let claps = 0;
+    document.getElementById('miniGameContent').innerHTML = \`
+      <div class="text-center space-y-4">
+        <div class="text-lg font-black" id="mgClapInstruct">Clap <span class="text-yellow-400 text-2xl">\${target}</span> times!</div>
+        <button id="mgClapBtn" onclick="MINIGAME.registerClap()" class="minigame-btn w-full text-5xl py-6">👏</button>
+        <div class="text-sm text-gray-400">Claps: <span id="mgClapCount" class="font-black text-pink-400">0</span> / \${target}</div>
+      </div>\`;
+    speakText('Clap ' + target + ' times!');
+  },
+
+  startRhythmGame() {
+    document.getElementById('miniGameTitle').textContent = 'Match the Rhythm!';
+    const patterns = [
+      { label: 'SLOW SLOW FAST', beats: [600, 600, 200] },
+      { label: 'FAST FAST SLOW', beats: [200, 200, 600] },
+      { label: 'SLOW FAST SLOW', beats: [600, 200, 600] },
+    ];
+    const pat = patterns[Math.floor(Math.random() * patterns.length)];
+    this.sequence = pat.beats;
+    document.getElementById('miniGameContent').innerHTML = \`
+      <div class="text-center space-y-4">
+        <div class="text-sm font-black text-yellow-300">\${pat.label}</div>
+        <button id="mgPlayRhythm" onclick="MINIGAME.playRhythm()" class="minigame-btn w-full py-4">
+          <i class="fas fa-play mr-2"></i>Hear the rhythm
+        </button>
+        <button id="mgRhythmTap" onclick="MINIGAME.tapRhythm()" class="minigame-btn w-full py-4 hidden">
+          👆 TAP
+        </button>
+        <div class="text-xs text-gray-400" id="mgRhythmStatus">Press play to hear it first</div>
+      </div>\`;
+  },
+
+  registerClap() {
+    const target = this.sequence[0] || 3;
+    let current = parseInt(document.getElementById('mgClapCount').textContent) + 1;
+    document.getElementById('mgClapCount').textContent = current;
+    REWARDS.playMicroSound();
+    REWARDS.spawnSparkles(3);
+    document.getElementById('mgClapBtn').classList.add('hit');
+    setTimeout(() => document.getElementById('mgClapBtn').classList.remove('hit'), 150);
+    if (current >= target) {
+      this.playerSay('correct');
+    }
+  },
+
+  playRhythm() {
+    document.getElementById('mgPlayRhythm').disabled = true;
+    let t = 0;
+    this.sequence.forEach((dur, i) => {
+      setTimeout(() => {
+        REWARDS.playMicroSound();
+        REWARDS.spawnSparkles(4);
+      }, t);
+      t += dur + 100;
+    });
+    setTimeout(() => {
+      document.getElementById('mgRhythmTap').classList.remove('hidden');
+      document.getElementById('mgRhythmStatus').textContent = 'Now tap the same rhythm!';
+    }, t + 200);
+  },
+
+  tapRhythm() {
+    REWARDS.playMicroSound();
+    REWARDS.spawnSparkles(4);
+    this.playerSeq.push(Date.now());
+    if (this.playerSeq.length >= this.sequence.length) {
+      this.playerSay('correct'); // simplified — reward any completion
+    }
+  },
+
+  playerSay(result) {
+    const name = STATE.selectedChild?.name || 'friend';
+    if (result === 'correct') {
+      this.score += 10;
+      document.getElementById('mgScore').textContent = this.score;
+      REWARDS.fire('medium', { trigger: 'minigame_correct' });
+      speakText(\`Yes! \${name}! Perfect!\`);
+      this.round++;
+      if (this.round > this.maxRounds) {
+        setTimeout(() => this.end(true), 800);
+      } else {
+        document.getElementById('mgRound').textContent = this.round;
+        setTimeout(() => this.startRepeatGame(), 1200);
+      }
+    } else {
+      speakText(\`Try again \${name}! You can do it!\`);
+    }
+  },
+
+  end(win) {
+    this.active = false;
+    const name = STATE.selectedChild?.name || 'friend';
+    this.close();
+    if (win) {
+      REWARDS.fire('major', { trigger: 'minigame_win' });
+      speakText(\`YAAAYYY! \${name} won the game! You are AMAZING!\`);
+      STATE.engScore = Math.min(100, STATE.engScore + 20);
+      updateEngagementScoreUI();
+    }
+  },
+
+  close() {
+    const modal = document.getElementById('miniGameModal');
+    modal.style.display = 'none';
+    modal.classList.add('hidden');
+    this.active = false;
+    clearInterval(this.beatTimer);
+  },
+};
+
+function startMiniGame(type) {
+  if (!STATE.sessionActive && !STATE.selectedChild) {
+    showToast('Start a session to play mini-games!', '⚠️', 'warning');
+    return;
+  }
+  MINIGAME.start(type);
+}
+
+function closeMiniGame() { MINIGAME.close(); }
+function closeLevelUp() {
+  const modal = document.getElementById('levelUpModal');
+  modal.style.display = 'none';
+  modal.classList.add('hidden');
+}
+
 // ── Star & Note animation ────────────────────────────────────
 (function initParticles() {
   const stars = document.getElementById('stars');
@@ -2595,18 +3254,16 @@ async function stopSession() {
 
 async function greetChild() {
   if (!STATE.selectedChild || !STATE.currentSession) return;
-  // No emojis — these will be spoken aloud
-  const greetings = [
-    \`Hi \${STATE.selectedChild.name}! Ready to play and sing some songs today?\`,
-    \`Hey there, \${STATE.selectedChild.name}! Let's have some music fun!\`,
-    \`Yay, \${STATE.selectedChild.name} is here! Time for music magic!\`
-  ];
-  const text = greetings[Math.floor(Math.random() * greetings.length)];
-  addChatBubble(text + ' 🌟', 'ai'); // emoji only in chat bubble, not spoken
-  
+  // Use PERFORMER for expressive, energy-matched greeting
+  const text = PERFORMER.getGreeting(STATE.selectedChild.name, STATE.energyLevel);
+  addChatBubble(text + ' 🌟', 'ai');
+
   STATE.lastInteraction = 'talk';
   STATE.lastInteractionTime = Date.now();
   updateStateUI('talk', 'greeting');
+
+  // Micro reward for starting a session
+  REWARDS.fire('micro', { trigger: 'session_start' });
 
   // Await greeting speech to finish, THEN start first song naturally
   await speakText(text);
@@ -2676,24 +3333,12 @@ async function triggerInteraction(trigger = 'manual') {
     if (predictedNext) STATE._predictedNextStyle = predictedNext;
 
     // ── Talk phase ──────────────────────────────────────────
-    const afterSongTexts = [
-      \`You liked that one, huh \${child.name}? Let's try another!\`,
-      \`Woohoo! That was so fun! Ready for more music?\`,
-      \`Great listening, \${child.name}! Did that make you want to dance?\`,
-      \`Yay! I love that song too! Want to hear another one?\`,
-    ];
-    const transitionTexts = [
-      \`Okay \${child.name}, get ready... the music is starting!\`,
-      \`Here we go!\`,
-      \`Listen carefully, \${child.name}! This one is super special!\`,
-      \`Ready? One, two, three, let's go!\`,
-    ];
-
+    // Use PERFORMER for energy-matched, expressive lines
     if (STATE.lastInteraction === 'sing' || STATE.lastInteraction === null) {
       const talkText = STATE.lastInteraction === 'sing'
-        ? afterSongTexts[Math.floor(Math.random() * afterSongTexts.length)]
-        : transitionTexts[0];
-      addChatBubble(talkText, 'ai');
+        ? PERFORMER.getAfterSong(child.name, STATE.energyLevel)
+        : PERFORMER.getGreeting(child.name, STATE.energyLevel);
+      addChatBubble(talkText + ' 🎵', 'ai');
       updateStateUI('talk', trigger);
       await speakText(talkText);
     }
@@ -2730,8 +3375,8 @@ async function triggerInteraction(trigger = 'manual') {
     STATE.consecutiveSongs++;
 
     // ── Transition cue → then music ─────────────────────────
-    const transText = transitionTexts[Math.floor(Math.random() * transitionTexts.length)];
-    addChatBubble(transText, 'ai');
+    const transText = PERFORMER.getTransition(child.name, STATE.energyLevel);
+    addChatBubble(transText + ' 🎵', 'ai');
     updateStateUI('talk', 'transition');
     await speakText(transText);
 
@@ -2816,30 +3461,31 @@ async function onAudioEnded() {
   clearInterval(STATE.progressTimer);
   document.getElementById('progressFill').style.width = '100%';
   updateStateUI('talk', 'song_ended');
-  
-  // No emojis in spoken text
-  const afterTexts = [
-    \`Great song, \${STATE.selectedChild?.name || 'friend'}! Did you like that?\`,
-    \`Yay! That was so fun! Want to hear another one?\`,
-    \`Wow, you are such a great music listener! More?\`,
-  ];
-  const t = afterTexts[Math.floor(Math.random() * afterTexts.length)];
-  addChatBubble(t + ' 😊', 'ai'); // emoji in chat only
-  
-  // Await speech before doing anything else
+
+  const name = STATE.selectedChild?.name || 'friend';
+
+  // ── DOPAMINE LOOP: reward → praise → new prompt ──────────
+  // 1. Immediate reward sound + animation (< 100ms)
+  REWARDS.triggerDopamineLoop(STATE.engScore, 'song_complete');
+
+  // 2. Expressive after-song voice via PERFORMER (energy-matched)
+  const t = PERFORMER.getAfterSong(name, STATE.energyLevel);
+  addChatBubble(t + ' 🎉', 'ai');
+
+  // 3. Await speech before anything else
   await speakText(t);
-  
+
   addCycleEvent('💬', 'talk', 'Post-song response');
   STATE.lastInteraction = 'talk';
-  
-  // Auto-trigger next if still active (natural pause after speech finishes)
+
+  // 4. Auto-trigger next (the "new prompt" in the dopamine loop)
   if (STATE.sessionActive && STATE.mode === 'auto') {
-    await new Promise(r => setTimeout(r, 1200)); // brief beat
+    await new Promise(r => setTimeout(r, 1200));
     if (STATE.sessionActive && STATE.mode === 'auto' && !STATE.isPlaying) {
       triggerInteraction('auto_after_song');
     }
   }
-  
+
   updateEngagementUI();
 }
 
@@ -2913,28 +3559,26 @@ async function sendEngagementCue(type, intensity) {
   if (type === 'smile') {
     STATE.smileCount++;
     document.getElementById('smileCount').textContent = STATE.smileCount;
-    
-    // Trigger joy response if playing
+    // Micro reward on every smile
+    REWARDS.fire('micro', { trigger: 'smile' });
+    STATE.engScore = Math.min(100, STATE.engScore + 5);
+    updateEngagementScoreUI();
+    // Joy response in chat (no speech mid-song to avoid overlap)
     if (STATE.isPlaying && STATE.currentSnippet) {
       setTimeout(() => {
-        const joyTexts = [
-          \`That smile is everything, \${STATE.selectedChild.name}!\`,
-          \`You are loving this! Keep smiling!\`,
-          \`I love seeing you happy!\`
-        ];
-        const msg = joyTexts[Math.floor(Math.random() * joyTexts.length)];
+        const msg = PERFORMER.getJoy(STATE.selectedChild?.name || 'friend', STATE.energyLevel);
         addChatBubble(msg + ' 😍', 'ai');
-        // Don't speak joy response mid-song — just show in chat
       }, 500);
     }
   }
   if (type === 'laughter') {
     STATE.laughCount++;
     document.getElementById('laughCount').textContent = STATE.laughCount;
-    const laughMsg = \`Haha! You are laughing! That makes me so happy too!\`;
+    // Medium reward on laughter
+    REWARDS.fire('medium', { trigger: 'laughter' });
+    const laughMsg = PERFORMER.getJoy(STATE.selectedChild?.name || 'friend', STATE.energyLevel);
     addChatBubble(laughMsg + ' 😂🎵', 'ai');
     if (!STATE.isPlaying) speakText(laughMsg);
-    // Boost engagement score
     STATE.engScore = Math.min(100, STATE.engScore + 15);
     updateEngagementScoreUI();
   }
@@ -3530,10 +4174,18 @@ async function init() {
   // Load voices for TTS
   if ('speechSynthesis' in window) {
     speechSynthesis.getVoices();
-    // Some browsers load voices async
     speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
   }
-  
+
+  // Restore XP + level from localStorage
+  const savedXP = parseInt(localStorage.getItem('mb_xp') || '0');
+  if (savedXP > 0) {
+    REWARDS.xp = savedXP;
+    REWARDS.level = REWARDS.computeLevel();
+    REWARDS.updateXPBar();
+  }
+  // Auto-save XP every 30s
+  setInterval(() => localStorage.setItem('mb_xp', REWARDS.xp.toString()), 30000);
   // Load profiles on start
   const r = await api('GET', '/profiles');
   if (r.success && r.data?.length) {
