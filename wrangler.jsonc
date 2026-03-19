@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "webapp",
+  "name": "musicbuddy-ai",
   "compatibility_date": "2026-03-19",
   "pages_build_output_dir": "./dist",
   "compatibility_flags": ["nodejs_compat"],
@@ -8,7 +8,7 @@
     {
       "binding": "DB",
       "database_name": "webapp-production",
-      "database_id": "local-dev-placeholder"
+      "database_id": "f15556d9-8cbf-4593-a552-465c1cc5e2f3"
     }
   ]
 }

@@ -6,8 +6,9 @@
 
 ## 🌐 Live URL
 
-**App:** https://3000-idbremwyohql3eun9mv08-8f57ffe2.sandbox.novita.ai  
-**Health:** https://3000-idbremwyohql3eun9mv08-8f57ffe2.sandbox.novita.ai/api/health  
+**🚀 Production:** https://musicbuddy-ai.pages.dev  
+**Health Check:** https://musicbuddy-ai.pages.dev/api/health  
+**GitHub:** https://github.com/mkbrown261/musicbuddy-ai  
 **Platform:** Cloudflare Pages (Edge) via Hono + D1 SQLite
 
 ---
