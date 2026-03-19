@@ -17,6 +17,7 @@ import { engagement } from './routes/engagement'
 import { music } from './routes/music'
 import { dashboard } from './routes/dashboard'
 import { intelligence } from './routes/intelligence'
+import { billing } from './routes/billing'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -38,6 +39,7 @@ app.route('/api/engagement', engagement)
 app.route('/api/music', music)
 app.route('/api/dashboard', dashboard)
 app.route('/api/intelligence', intelligence)
+app.route('/api/billing', billing)
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (c) => {
@@ -441,6 +443,92 @@ function getMainHTML(): string {
     </div>
   </div>
 </div>
+
+<!-- ═══ BILLING MODAL (parent-facing, stays on page) ═══ -->
+<div id="billingModal" class="hidden" style="position:fixed;inset:0;z-index:10001;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px)">
+  <div class="glass max-w-md w-full mx-4 overflow-y-auto" style="max-height:92vh">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h2 class="font-black text-xl">Unlock Music Buddy</h2>
+          <p class="text-xs text-purple-300 mt-0.5">For parents — one-time setup, child keeps playing</p>
+        </div>
+        <button onclick="BILLING.closeModal()" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+      </div>
+      <div class="grid grid-cols-1 gap-3 mb-5" id="billingTiers"></div>
+      <div id="billingTierDetail" class="glass-light rounded-xl p-4 mb-5 hidden">
+        <div class="font-black text-sm mb-2" id="billingTierName"></div>
+        <ul class="text-xs text-gray-300 space-y-1" id="billingTierFeatures"></ul>
+        <div class="text-lg font-black text-yellow-400 mt-3" id="billingTierPrice"></div>
+      </div>
+      <div id="billingPaymentSection" class="hidden space-y-4">
+        <div class="glass-light p-4 rounded-xl">
+          <p class="text-xs font-black text-gray-300 mb-3 flex items-center gap-2">
+            <i class="fas fa-lock text-green-400"></i> Secure payment
+          </p>
+          <div id="stripeCardElement" class="p-3 rounded-lg" style="background:rgba(255,255,255,0.08);min-height:44px;border:1px solid rgba(255,255,255,0.2)">
+            <div id="stripeCardPlaceholder" class="text-xs text-gray-400 flex items-center gap-2">
+              <i class="fas fa-credit-card"></i>
+              <span>Card number • Expiry • CVC</span>
+              <span class="ml-auto text-yellow-400 font-bold" id="billingStripeStatus">Configure Stripe key in Settings</span>
+            </div>
+          </div>
+          <div id="stripeCardErrors" class="text-xs text-red-400 mt-2 hidden"></div>
+        </div>
+        <details class="glass-light rounded-xl">
+          <summary class="p-3 text-xs font-black text-gray-300 cursor-pointer flex items-center gap-2">
+            <i class="fas fa-key text-yellow-400"></i> Have your own API keys? Use them directly
+          </summary>
+          <div class="p-4 pt-0 space-y-3">
+            <div>
+              <label class="text-xs text-gray-400 block mb-1">OpenAI Key (premium TTS)</label>
+              <input type="password" id="selfServiceOpenAI" placeholder="sk-..." class="text-xs" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 block mb-1">Replicate Key (music generation)</label>
+              <input type="password" id="selfServiceReplicate" placeholder="r8_..." class="text-xs" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 block mb-1">ElevenLabs Key (best TTS voice)</label>
+              <input type="password" id="selfServiceElevenLabs" placeholder="xi-..." class="text-xs" />
+            </div>
+            <button onclick="BILLING.saveSelfServiceKeys()" class="btn-secondary w-full text-xs">
+              <i class="fas fa-save mr-1"></i> Save My Own Keys
+            </button>
+          </div>
+        </details>
+        <button id="billingPayBtn" onclick="BILLING.processPayment()" class="btn-primary w-full font-black text-base py-3">
+          <i class="fas fa-lock mr-2"></i> <span id="billingPayBtnLabel">Complete Purchase</span>
+        </button>
+        <p class="text-xs text-gray-500 text-center">Parent/guardian required. Cancel anytime.</p>
+      </div>
+      <div class="flex gap-2 items-center mt-4">
+        <div class="flex-1 h-1 rounded-full" id="billingStep1Bar" style="background:rgba(255,107,157,0.8)"></div>
+        <div class="flex-1 h-1 rounded-full" id="billingStep2Bar" style="background:rgba(255,255,255,0.1)"></div>
+        <div class="flex-1 h-1 rounded-full" id="billingStep3Bar" style="background:rgba(255,255,255,0.1)"></div>
+      </div>
+      <div id="billingStatus" class="mt-4 text-xs text-center text-gray-400 hidden"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SOFT GATE PREVIEW MODAL ═══ -->
+<div id="softGateModal" class="hidden" style="position:fixed;inset:0;z-index:10001;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);backdrop-filter:blur(8px)">
+  <div class="glass max-w-sm mx-4 p-6 text-center">
+    <div class="text-5xl mb-3" id="sgEmoji">🎵</div>
+    <h3 class="font-black text-xl mb-2" id="sgTitle">Ooooh, you want more!</h3>
+    <p class="text-sm text-gray-300 mb-4" id="sgDesc">That was just a taste... there is so much more!</p>
+    <div class="glass-light rounded-xl p-3 mb-5 text-left space-y-1" id="sgPreviewWhat"></div>
+    <div class="flex gap-3">
+      <button onclick="closeSoftGate()" class="btn-secondary flex-1 text-sm">Maybe later</button>
+      <button onclick="BILLING.open('premium')" class="btn-primary flex-1 text-sm font-black">
+        <i class="fas fa-unlock mr-1"></i> Unlock it!
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 mt-3" id="sgProgressUnlock"></p>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"><span id="toastIcon">✨</span> <span id="toastMsg"></span></div>
 
@@ -488,7 +576,7 @@ function getMainHTML(): string {
     <button class="tab-btn whitespace-nowrap" onclick="switchTab('library')" id="tab-library">
       <i class="fas fa-headphones mr-1"></i> Library
     </button>
-    <button class="tab-btn whitespace-nowrap" onclick="switchTab('creator')" id="tab-creator">
+    <button class="tab-btn whitespace-nowrap" onclick="switchTabGated('creator')" id="tab-creator">
       <i class="fas fa-wand-magic-sparkles mr-1"></i> Creator
     </button>
     <button class="tab-btn whitespace-nowrap" onclick="switchTab('settings')" id="tab-settings">
@@ -1258,75 +1346,49 @@ function getMainHTML(): string {
   <!-- ══════════════════ TAB: SETTINGS ══════════════════════ -->
   <div id="tab-content-settings" class="tab-content px-4 py-4 hidden">
     <div class="max-w-2xl mx-auto space-y-4">
-      
+
+      <!-- Subscription Status -->
       <div class="glass p-6">
         <h3 class="font-black text-lg mb-4 flex items-center gap-2">
-          <i class="fas fa-key text-yellow-400"></i> API Configuration
-          <span class="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full font-bold">Admin Only</span>
+          <i class="fas fa-star text-yellow-400"></i> Subscription &amp; Access
         </h3>
-        
-        <!-- Pricing overview -->
-        <div class="glass-light p-4 rounded-xl mb-5">
-          <p class="text-xs font-black text-yellow-300 mb-3 uppercase tracking-wide">💰 Estimated Costs Per Use</p>
-          <div class="space-y-2 text-xs">
-            <div class="flex justify-between items-center">
-              <span class="text-gray-300">🎼 Meta MusicGen (Replicate)</span>
-              <span class="text-green-400 font-bold">~$0.007 / song</span>
+        <div id="subscriptionStatus" class="glass-light p-4 rounded-xl mb-4">
+          <!-- Rendered by BILLING.renderStatus() -->
+          <div class="flex items-center gap-3">
+            <div class="text-3xl">🆓</div>
+            <div>
+              <div class="font-black text-sm">Free Plan</div>
+              <div class="text-xs text-gray-400">Mini-games, call-and-response, basic praise loops</div>
             </div>
-            <div class="flex justify-between items-center">
-              <span class="text-gray-300">🎻 Google Lyria 2 (Replicate)</span>
-              <span class="text-green-400 font-bold">~$0.060 / song</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="text-gray-300">⚡ ACE-Step (Replicate)</span>
-              <span class="text-green-400 font-bold">~$0.017 / song</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="text-gray-300">🗣️ OpenAI TTS (per voice line)</span>
-              <span class="text-green-400 font-bold">~$0.001 / phrase</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="text-gray-300">🌐 Web Speech API (fallback)</span>
-              <span class="text-blue-400 font-bold">Free — built-in</span>
-            </div>
+            <button onclick="BILLING.open()" class="btn-primary text-xs ml-auto px-4">
+              <i class="fas fa-unlock mr-1"></i> Upgrade
+            </button>
           </div>
-          <p class="text-xs text-gray-500 mt-3">A 30-minute session (~15 songs + voice lines) costs approximately <span class="text-white font-bold">$0.12–$1.00</span> depending on model. Web Speech API fallback is always free.</p>
         </div>
-
-        <div class="space-y-4">
-          <div>
-            <label class="text-sm font-bold text-gray-300 block mb-2">
-              🎵 Suno API Key <span class="text-xs text-gray-500">(private access only)</span>
-            </label>
-            <input type="password" id="sunoKeyInput" placeholder="sk-suno-..." class="text-sm" />
-            <p class="text-xs text-gray-500 mt-1">Suno API is not publicly open. Requires private access arrangement. <a href="https://sunoapi.org" target="_blank" class="text-blue-400">sunoapi.org</a></p>
+        <div class="grid grid-cols-3 gap-2 text-xs text-center">
+          <div class="glass-light p-3 rounded-xl">
+            <div class="font-black text-green-400">✓</div><div class="text-gray-400 mt-1">Free games</div>
           </div>
-          <div>
-            <label class="text-sm font-bold text-gray-300 block mb-2">
-              🤖 Replicate API Key <span class="text-xs text-green-400 font-bold">(recommended — Meta MusicGen)</span>
-            </label>
-            <input type="password" id="replicateKeyInput" placeholder="r8_..." class="text-sm" />
-            <p class="text-xs text-gray-500 mt-1">Best alternative! Meta MusicGen via Replicate. ~$0.004/req. Get yours at <a href="https://replicate.com" target="_blank" class="text-blue-400">replicate.com</a></p>
+          <div class="glass-light p-3 rounded-xl" id="settingsMusicStatus">
+            <div class="font-black text-gray-500" id="settingsMusicIcon">🔒</div><div class="text-gray-400 mt-1">AI Songs</div>
           </div>
-          <div>
-            <label class="text-sm font-bold text-gray-300 block mb-2">
-              🗣️ OpenAI API Key <span class="text-xs text-gray-500">(for high-quality TTS speech)</span>
-            </label>
-            <input type="password" id="openaiKeyInput" placeholder="sk-..." class="text-sm" />
-            <p class="text-xs text-gray-500 mt-1">OpenAI TTS (shimmer voice). Falls back to browser Web Speech API for free. Get yours at <a href="https://platform.openai.com" target="_blank" class="text-blue-400">platform.openai.com</a></p>
-          </div>
-          <button onclick="saveApiKeys()" class="btn-primary w-full">
-            <i class="fas fa-save mr-2"></i> Validate & Save API Keys
-          </button>
-          <div class="glass-light p-4 rounded-xl mt-2">
-            <p class="text-xs text-gray-400 font-bold mb-2">⚡ To persist keys for all users (production):</p>
-            <code class="text-xs text-green-300 block">npx wrangler secret put REPLICATE_API_KEY</code>
-            <code class="text-xs text-green-300 block">npx wrangler secret put OPENAI_API_KEY</code>
-            <code class="text-xs text-gray-500 block mt-1"># Then redeploy: npm run build && npx wrangler pages deploy dist --project-name musicbuddy-ai</code>
+          <div class="glass-light p-3 rounded-xl" id="settingsTTSStatus">
+            <div class="font-black text-gray-500" id="settingsTTSIcon">🔒</div><div class="text-gray-400 mt-1">Premium Voice</div>
           </div>
         </div>
       </div>
 
+      <!-- Pricing overview -->
+      <div class="glass p-5">
+        <h3 class="font-black text-sm mb-3 flex items-center gap-2">
+          <i class="fas fa-tags text-pink-400"></i> Plans
+        </h3>
+        <div class="space-y-3" id="settingsPlansList">
+          <!-- Rendered by BILLING -->
+        </div>
+      </div>
+
+      <!-- Audio Settings (unchanged) -->
       <div class="glass p-6">
         <h3 class="font-black text-lg mb-4 flex items-center gap-2">
           <i class="fas fa-volume-up text-blue-400"></i> Audio Settings
@@ -1334,16 +1396,16 @@ function getMainHTML(): string {
         <div class="space-y-4">
           <div>
             <label class="text-sm font-bold text-gray-300 block mb-2">Master Volume: <span id="masterVolumeLabel">70</span>%</label>
-            <input type="range" id="masterVolume" min="0" max="100" value="70" class="w-full" 
+            <input type="range" id="masterVolume" min="0" max="100" value="70" class="w-full"
                    oninput="document.getElementById('masterVolumeLabel').textContent=this.value"
                    style="background:none;border:none;padding:0;accent-color:#ff6b9d" />
           </div>
           <div>
             <label class="text-sm font-bold text-gray-300 block mb-2">TTS Speed</label>
             <select id="ttsSpeed" class="text-sm">
-              <option value="0.8">🐢 Slow (for young children)</option>
-              <option value="0.9" selected>🚶 Normal</option>
-              <option value="1.0">🏃 Fast</option>
+              <option value="0.8">Slow (for young children)</option>
+              <option value="0.9" selected>Normal</option>
+              <option value="1.0">Fast</option>
             </select>
           </div>
           <div>
@@ -1355,12 +1417,22 @@ function getMainHTML(): string {
               <option value="60000">1 minute</option>
             </select>
           </div>
+          <div>
+            <label class="text-sm font-bold text-gray-300 block mb-2">TTS Voice Provider</label>
+            <select id="ttsProvider" class="text-sm" onchange="BILLING.updateTTSProviderUI()">
+              <option value="webspeech">Browser (Free)</option>
+              <option value="openai">OpenAI (shimmer voice)</option>
+              <option value="elevenlabs">ElevenLabs (best — most natural)</option>
+            </select>
+            <div id="ttsProviderNote" class="text-xs text-gray-500 mt-1"></div>
+          </div>
         </div>
       </div>
 
+      <!-- Privacy & Safety (unchanged) -->
       <div class="glass p-6">
         <h3 class="font-black text-lg mb-4 flex items-center gap-2">
-          <i class="fas fa-lock text-green-400"></i> Privacy & Safety
+          <i class="fas fa-lock text-green-400"></i> Privacy &amp; Safety
         </h3>
         <div class="space-y-3">
           <label class="flex items-center gap-3 cursor-pointer">
@@ -3292,6 +3364,13 @@ async function triggerInteraction(trigger = 'manual') {
   if (STATE._interactionInProgress) return;
   STATE._interactionInProgress = true;
 
+  // ── GATE CHECK: manual song trigger requires starter/premium ──
+  // Auto triggers (from dopamine loop) bypass this so free experience stays fluid
+  if (trigger === 'manual' && !GATE.check('ai_music', { trigger })) {
+    STATE._interactionInProgress = false;
+    return;
+  }
+
   try {
     const child = STATE.selectedChild;
     const ageGroup = INTENT.getAgeGroup(child.age);
@@ -3677,12 +3756,34 @@ async function speakText(text) {
   const cleanText = stripEmojisAndSymbols(text);
   if (!cleanText) return;
 
-  // Apply expression engine for more human, energetic delivery
+  // Apply expression engine + PERFORMER for human, energetic delivery
   const expressiveText = EXPRESSOR.express(cleanText);
 
+  // ── TTS Provider cascade (best → fallback) ──────────────
+  // 1. ElevenLabs (most natural — best for children)
+  const elKey = localStorage.getItem('mb_elevenlabs_key');
+  if (elKey) {
+    const audioUrl = await callElevenLabsTTS(expressiveText);
+    if (audioUrl) {
+      const bgAudio = document.getElementById('audioPlayer');
+      if (STATE.isPlaying) bgAudio.volume = Math.max(0.1, bgAudio.volume * 0.3);
+      return new Promise((resolve) => {
+        const a = new Audio(audioUrl);
+        a.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+        a.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+          if (STATE.isPlaying) bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+          resolve();
+        };
+        a.onerror = () => { URL.revokeObjectURL(audioUrl); resolve(); };
+        a.play().catch(() => resolve());
+      });
+    }
+  }
+
   const openaiKey = localStorage.getItem('mb_openai_key');
-  
-  // Try OpenAI TTS if key available and session active
+
+  // 2. OpenAI TTS (shimmer voice)
   if (openaiKey && STATE.currentSession && STATE.selectedChild) {
     try {
       const r = await api('POST', '/music/tts', {
@@ -3692,10 +3793,9 @@ async function speakText(text) {
         trigger: 'speak'
       });
       if (r.success && r.data?.audio_url && !r.data.demo_mode) {
-        // Duck any background music while talking
         const bgAudio = document.getElementById('audioPlayer');
         if (STATE.isPlaying) bgAudio.volume = Math.max(0.1, bgAudio.volume * 0.3);
-        
+
         return new Promise((resolve) => {
           const ttsAudio = new Audio(r.data.audio_url);
           ttsAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
@@ -4153,6 +4253,495 @@ function updateSharedIntelPanel(shared, ageGroup) {
   }
 }
 
+// ══════════════════════════════════════════════════════════
+// PHASE 5: BILLING SYSTEM — Intent Layer only
+// Modular: Payment → Key Provisioning → Key Injection
+// ══════════════════════════════════════════════════════════
+const BILLING = {
+  // ── Plan definitions (modular — add/remove plans here) ──
+  PLANS: [
+    {
+      id: 'free',
+      name: 'Free',
+      emoji: '🆓',
+      price: '$0',
+      priceNote: 'forever',
+      color: 'text-green-400',
+      features: ['Mini-games (clap, repeat, rhythm)', 'Call-and-response interactions', 'Reward sounds + animations', 'XP + Level system', 'Browser TTS voice'],
+      gatedFeatures: ['ai_music', 'premium_tts', 'extended_session'],
+      stripePrice: null,
+    },
+    {
+      id: 'starter',
+      name: 'Starter',
+      emoji: '🎵',
+      price: '$4.99',
+      priceNote: '/ month',
+      color: 'text-blue-400',
+      features: ['Everything in Free', '20 AI songs/month', 'OpenAI TTS (shimmer voice)', 'Unlimited sessions', 'Song library'],
+      gatedFeatures: ['extended_session'],
+      stripePrice: 'price_starter_monthly', // replace with real Stripe price ID
+    },
+    {
+      id: 'premium',
+      name: 'Premium',
+      emoji: '👑',
+      price: '$9.99',
+      priceNote: '/ month',
+      color: 'text-yellow-400',
+      features: ['Everything in Starter', 'Unlimited AI songs', 'ElevenLabs TTS (most natural voice)', 'Creator Mode', 'Family group mode', 'Adaptive intelligence'],
+      gatedFeatures: [],
+      stripePrice: 'price_premium_monthly', // replace with real Stripe price ID
+      badge: 'Best Value',
+    },
+  ],
+
+  // ── Current state ────────────────────────────────────────
+  currentTier: null,       // loaded from localStorage
+  selectedPlanId: null,
+  stripeInstance: null,
+  stripeElements: null,
+  stripeCard: null,
+
+  // ── Intent: CheckKeyStatus ────────────────────────────────
+  getTier() {
+    if (this.currentTier) return this.currentTier;
+    const saved = localStorage.getItem('mb_tier');
+    // Verify keys exist for claimed tier
+    if (saved === 'premium') {
+      const hasEL = !!localStorage.getItem('mb_elevenlabs_key');
+      const hasRep = !!localStorage.getItem('mb_replicate_key');
+      if (hasEL || hasRep) { this.currentTier = 'premium'; return 'premium'; }
+    }
+    if (saved === 'starter') {
+      const hasOAI = !!localStorage.getItem('mb_openai_key');
+      const hasRep = !!localStorage.getItem('mb_replicate_key');
+      if (hasOAI || hasRep) { this.currentTier = 'starter'; return 'starter'; }
+    }
+    this.currentTier = 'free';
+    return 'free';
+  },
+
+  isPremium()  { return ['premium'].includes(this.getTier()); },
+  isStarter()  { return ['starter','premium'].includes(this.getTier()); },
+  hasMusicGen(){ return this.isStarter() && !!localStorage.getItem('mb_replicate_key'); },
+  hasPremiumTTS(){ return !!localStorage.getItem('mb_elevenlabs_key') || !!localStorage.getItem('mb_openai_key'); },
+
+  // ── Intent: Open billing modal ────────────────────────────
+  open(highlightPlan = null) {
+    this.renderTiers(highlightPlan);
+    const modal = document.getElementById('billingModal');
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+    this.renderStatus();
+    this.renderSettingsPlans();
+    this.updateTTSProviderUI();
+  },
+
+  closeModal() {
+    const modal = document.getElementById('billingModal');
+    modal.style.display = 'none';
+    modal.classList.add('hidden');
+    this.selectedPlanId = null;
+  },
+
+  renderTiers(highlight) {
+    const container = document.getElementById('billingTiers');
+    if (!container) return;
+    const tier = this.getTier();
+    container.innerHTML = this.PLANS.map(plan => {
+      const isActive = tier === plan.id;
+      const borderColor = isActive ? 'rgba(255,107,157,0.8)' : 'rgba(255,255,255,0.1)';
+      const badgeHtml = plan.badge ? '<span class="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full font-bold">' + plan.badge + '</span>' : '';
+      const activeBadge = isActive ? '<span class="text-xs bg-green-900 text-green-300 px-2 py-0.5 rounded-full font-bold">Current</span>' : '';
+      const preview = plan.features.slice(0,2).join(' • ');
+      return '<div onclick="BILLING.selectPlan('' + plan.id + '')"' +
+        ' class="glass-light rounded-xl p-4 cursor-pointer border-2 transition"' +
+        ' id="billingPlanCard_' + plan.id + '"' +
+        ' style="border-color:' + borderColor + '">' +
+        '<div class="flex items-center gap-3">' +
+        '<span class="text-2xl">' + plan.emoji + '</span>' +
+        '<div class="flex-1"><div class="flex items-center gap-2">' +
+        '<span class="font-black ' + plan.color + '">' + plan.name + '</span>' +
+        badgeHtml + activeBadge +
+        '</div><div class="text-xs text-gray-400">' + preview + '</div></div>' +
+        '<div class="text-right"><div class="font-black ' + plan.color + '">' + plan.price + '</div>' +
+        '<div class="text-xs text-gray-500">' + plan.priceNote + '</div></div>' +
+        '</div></div>';
+    }).join('');
+    if (highlight) setTimeout(() => this.selectPlan(highlight), 100);
+  },
+
+  selectPlan(planId) {
+    this.selectedPlanId = planId;
+    const plan = this.PLANS.find(p => p.id === planId);
+    if (!plan) return;
+
+    // Highlight selected card
+    this.PLANS.forEach(p => {
+      const card = document.getElementById('billingPlanCard_' + p.id);
+      if (card) card.style.borderColor = p.id === planId ? 'rgba(255,107,157,0.8)' : 'rgba(255,255,255,0.1)';
+    });
+
+    // Show tier details
+    const detail = document.getElementById('billingTierDetail');
+    document.getElementById('billingTierName').textContent = plan.emoji + ' ' + plan.name + ' Plan';
+    document.getElementById('billingTierFeatures').innerHTML = plan.features.map(function(f){return '<li class="flex items-start gap-1"><span class="text-green-400 mt-0.5">2713</span>'+f+'</li>';}).join('');
+    document.getElementById('billingTierPrice').textContent = plan.price + ' ' + plan.priceNote;
+    detail.classList.remove('hidden');
+
+    if (planId === 'free') {
+      document.getElementById('billingPaymentSection').classList.add('hidden');
+    } else {
+      document.getElementById('billingPaymentSection').classList.remove('hidden');
+      document.getElementById('billingPayBtnLabel').textContent = 'Subscribe to ' + plan.name + ' — ' + plan.price + '/mo';
+      this.initStripe();
+    }
+
+    // Step bar
+    document.getElementById('billingStep1Bar').style.background = 'rgba(255,107,157,0.8)';
+    document.getElementById('billingStep2Bar').style.background = planId !== 'free' ? 'rgba(255,107,157,0.8)' : 'rgba(255,255,255,0.1)';
+  },
+
+  // ── Intent: Initialize Stripe ─────────────────────────────
+  initStripe() {
+    const pubKey = localStorage.getItem('mb_stripe_pub_key');
+    if (!pubKey) {
+      document.getElementById('billingStripeStatus').textContent = 'Add Stripe key in self-service below';
+      return;
+    }
+    if (this.stripeInstance) return; // already initialized
+    try {
+      if (typeof Stripe !== 'undefined') {
+        this.stripeInstance = Stripe(pubKey);
+        this.stripeElements = this.stripeInstance.elements();
+        this.stripeCard = this.stripeElements.create('card', {
+          style: { base: { color: '#ffffff', fontSize: '14px', '::placeholder': { color: '#666' } } }
+        });
+        this.stripeCard.mount('#stripeCardElement');
+        document.getElementById('stripeCardPlaceholder').style.display = 'none';
+        document.getElementById('billingStripeStatus').textContent = 'Ready';
+      }
+    } catch(e) { console.warn('Stripe init:', e); }
+  },
+
+  // ── Intent: ProcessPayment ────────────────────────────────
+  async processPayment() {
+    const plan = this.PLANS.find(p => p.id === this.selectedPlanId);
+    if (!plan || plan.id === 'free') { this.closeModal(); return; }
+
+    // Check for self-service keys first (no payment needed)
+    const hasOwnKeys = this.checkSelfServiceKeysForPlan(plan.id);
+    if (hasOwnKeys) {
+      this.completePlanActivation(plan.id);
+      return;
+    }
+
+    const btn = document.getElementById('billingPayBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processing...';
+    this.showBillingStatus('Verifying payment...', 'info');
+
+    // ── Intent: VerifyPayment → InjectKey ─────────────────
+    // In production: POST to /api/billing/create-subscription with stripeCard token
+    // For demo/self-hosted: simulate payment verification
+    try {
+      if (this.stripeInstance && this.stripeCard) {
+        const { paymentMethod, error } = await this.stripeInstance.createPaymentMethod({
+          type: 'card', card: this.stripeCard,
+        });
+        if (error) throw new Error(error.message);
+
+        // POST intent to backend: PurchaseAPIKey
+        const r = await api('POST', '/billing/subscribe', {
+          plan_id: plan.id,
+          payment_method_id: paymentMethod.id,
+          stripe_price_id: plan.stripePrice,
+        });
+
+        if (r.success) {
+          // Intent: InjectKey — backend returns provisioned keys
+          if (r.data?.openai_key) localStorage.setItem('mb_openai_key', r.data.openai_key);
+          if (r.data?.replicate_key) localStorage.setItem('mb_replicate_key', r.data.replicate_key);
+          if (r.data?.elevenlabs_key) localStorage.setItem('mb_elevenlabs_key', r.data.elevenlabs_key);
+          this.completePlanActivation(plan.id);
+        } else {
+          throw new Error(r.error || 'Payment failed');
+        }
+      } else {
+        // No Stripe configured — show self-service prompt
+        this.showBillingStatus('Add your API keys in the section below to activate this plan', 'info');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-lock mr-2"></i> <span id="billingPayBtnLabel">Complete Purchase</span>';
+      }
+    } catch(e) {
+      this.showBillingStatus('Error: ' + e.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-lock mr-2"></i> <span id="billingPayBtnLabel">Try Again</span>';
+    }
+  },
+
+  checkSelfServiceKeysForPlan(planId) {
+    if (planId === 'premium') return !!localStorage.getItem('mb_elevenlabs_key') || !!localStorage.getItem('mb_replicate_key');
+    if (planId === 'starter') return !!localStorage.getItem('mb_openai_key') || !!localStorage.getItem('mb_replicate_key');
+    return false;
+  },
+
+  // ── Intent: SaveSelfServiceKeys ──────────────────────────
+  saveSelfServiceKeys() {
+    const oai = document.getElementById('selfServiceOpenAI')?.value.trim();
+    const rep = document.getElementById('selfServiceReplicate')?.value.trim();
+    const el  = document.getElementById('selfServiceElevenLabs')?.value.trim();
+    if (oai) localStorage.setItem('mb_openai_key', oai);
+    if (rep) localStorage.setItem('mb_replicate_key', rep);
+    if (el)  localStorage.setItem('mb_elevenlabs_key', el);
+
+    // Auto-upgrade tier based on keys provided
+    let tier = 'free';
+    if (el) tier = 'premium';
+    else if (oai || rep) tier = 'starter';
+
+    this.completePlanActivation(tier);
+  },
+
+  // ── Intent: InjectKey — activates tier ───────────────────
+  completePlanActivation(planId) {
+    localStorage.setItem('mb_tier', planId);
+    this.currentTier = planId;
+    this.closeModal();
+    this.renderStatus();
+    this.renderSettingsPlans();
+    this.updateTTSProviderUI();
+    REWARDS.fire('major', { trigger: 'plan_activated' });
+    const plan = this.PLANS.find(p => p.id === planId);
+    showToast((plan?.emoji || '🎉') + ' ' + (plan?.name || planId) + ' plan activated!', '🔓', 'success');
+    speakText('Yaaayyy! Everything is unlocked! Let us make some amazing music!');
+    // Update gate states
+    GATE.refresh();
+  },
+
+  showBillingStatus(msg, type) {
+    const el = document.getElementById('billingStatus');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'mt-4 text-xs text-center ' + (type === 'error' ? 'text-red-400' : 'text-gray-400');
+    el.classList.remove('hidden');
+  },
+
+  // ── Render subscription status in Settings tab ───────────
+  renderStatus() {
+    const tier = this.getTier();
+    const plan = this.PLANS.find(p => p.id === tier);
+    const el = document.getElementById('subscriptionStatus');
+    if (!el || !plan) return;
+    el.innerHTML = '<div class="flex items-center gap-3">' +
+      '<div class="text-3xl">' + plan.emoji + '</div>' +
+      '<div><div class="font-black text-sm ' + plan.color + '">' + plan.name + ' Plan</div>' +
+      '<div class="text-xs text-gray-400">' + plan.features.slice(0,2).join(' • ') + '</div></div>' +
+      (tier !== 'premium'
+        ? '<button onclick="BILLING.open()" class="btn-primary text-xs ml-auto px-4"><i class="fas fa-unlock mr-1"></i> Upgrade</button>'
+        : '<span class="text-xs text-green-400 font-black ml-auto">Active</span>') +
+      '</div>';
+    // Update icon states
+    const musicIcon = document.getElementById('settingsMusicIcon');
+    const ttsIcon = document.getElementById('settingsTTSIcon');
+    if (musicIcon) musicIcon.textContent = this.hasMusicGen() ? '✓' : '🔒';
+    if (ttsIcon) ttsIcon.textContent = this.hasPremiumTTS() ? '✓' : '🔒';
+  },
+
+  renderSettingsPlans() {
+    const el = document.getElementById('settingsPlansList');
+    if (!el) return;
+    const tier = this.getTier();
+    el.innerHTML = this.PLANS.map(function(plan) {
+      const isActive = tier === plan.id;
+      const preview = plan.features.slice(0,2).join(' • ');
+      const actionBtn = isActive
+        ? '<span class="text-xs bg-green-900 text-green-300 px-2 py-0.5 rounded-full font-bold">Active</span>'
+        : (plan.id !== 'free' ? '<button onclick="BILLING.open(\'' + plan.id + '\')" class="btn-primary text-xs px-3">Select</button>' : '');
+      return '<div class="flex items-center gap-3 glass-light p-3 rounded-xl">' +
+        '<span class="text-xl">' + plan.emoji + '</span>' +
+        '<div class="flex-1">' +
+        '<span class="font-black text-sm ' + plan.color + '">' + plan.name + '</span>' +
+        '<span class="text-xs text-gray-400 ml-2">' + preview + '</span></div>' +
+        '<div class="font-black ' + plan.color + ' text-sm">' + plan.price + '</div>' +
+        actionBtn + '</div>';
+    }).join('');
+  },
+
+  updateTTSProviderUI() {
+    const sel = document.getElementById('ttsProvider');
+    const note = document.getElementById('ttsProviderNote');
+    if (!sel || !note) return;
+    const hasEL = !!localStorage.getItem('mb_elevenlabs_key');
+    const hasOAI = !!localStorage.getItem('mb_openai_key');
+
+    if (hasEL) {
+      sel.value = 'elevenlabs';
+      note.textContent = 'ElevenLabs active — most natural, human-sounding voice';
+      note.className = 'text-xs text-green-400 mt-1';
+    } else if (hasOAI) {
+      sel.value = 'openai';
+      note.textContent = 'OpenAI shimmer voice active';
+      note.className = 'text-xs text-blue-400 mt-1';
+    } else {
+      sel.value = 'webspeech';
+      note.textContent = 'Browser voice (free). Upgrade for a natural, child-friendly voice.';
+      note.className = 'text-xs text-gray-500 mt-1';
+    }
+  },
+};
+
+// ══════════════════════════════════════════════════════════
+// PHASE 5: FEATURE GATE — Intent Layer
+// Controls what's available per tier. Never blocks Action Layer.
+// ══════════════════════════════════════════════════════════
+const GATE = {
+  // Feature registry
+  FEATURES: {
+    ai_music:         { tiers: ['starter','premium'], name: 'AI Song Generation', emoji: '🎵' },
+    premium_tts:      { tiers: ['starter','premium'], name: 'Premium TTS Voice',  emoji: '🗣️' },
+    extended_session: { tiers: ['premium'],            name: 'Extended Sessions',  emoji: '⏱️' },
+    creator_mode:     { tiers: ['premium'],            name: 'Creator Mode',       emoji: '🎛️' },
+    family_mode:      { tiers: ['premium'],            name: 'Family Group Mode',  emoji: '👨‍👩‍👧' },
+  },
+
+  // ── Intent: attempt_premium_feature ──────────────────────
+  // Returns true if allowed, false + fires soft gate if not
+  check(featureId, context = {}) {
+    const feature = this.FEATURES[featureId];
+    if (!feature) return true; // unknown feature = allow
+    const tier = BILLING.getTier();
+    if (feature.tiers.includes(tier)) return true;
+
+    // Gate fires — but only when engagement is high or repeated access
+    this.fireSoftGate(featureId, feature, context);
+    return false;
+  },
+
+  fireSoftGate(featureId, feature, context) {
+    // Only show gate prompt at good moments (high engagement OR 2nd+ attempt)
+    const key = 'mb_gate_count_' + featureId;
+    const count = parseInt(localStorage.getItem(key) || '0') + 1;
+    localStorage.setItem(key, count.toString());
+
+    const modal = document.getElementById('softGateModal');
+    if (!modal) return;
+
+    // Expressive voice line BEFORE showing modal
+    const child = STATE.selectedChild?.name || 'friend';
+    const voiceLines = {
+      ai_music:         'Ooooh ' + child + '! You want to hear a real song? That is so exciting!',
+      premium_tts:      'Ooooh! You want my best voice? I can sound even better!',
+      extended_session: 'Wow ' + child + ', you are having so much fun! Let us keep going!',
+      creator_mode:     'A real song builder! You are going to LOVE this!',
+      family_mode:      'Everyone together! That sounds amazing!',
+    };
+
+    const line = voiceLines[featureId] || ('Ooooh! Something special is waiting for you, ' + child + '!');
+    speakText(line);
+
+    // Preview text
+    document.getElementById('sgEmoji').textContent = feature.emoji;
+    document.getElementById('sgTitle').textContent = count === 1 ? 'Ooooh... want to hear more?' : 'You really want this!';
+    document.getElementById('sgDesc').textContent = feature.name + ' unlocks with a subscription';
+    document.getElementById('sgPreviewWhat').innerHTML = BILLING.PLANS
+      .filter(p => p.id !== 'free' && p.gatedFeatures && !p.gatedFeatures.includes(featureId))
+        .map(function(p) { return '<div class="text-xs text-gray-300"><span class="' + p.color + ' font-black">' + p.emoji + ' ' + p.name + '</span> — ' + p.price + '/mo</div>'; })
+      .join('');
+
+    // Progress-based unlock message
+    const xpNeeded = 500;
+    if (REWARDS.xp >= xpNeeded && featureId === 'ai_music') {
+      document.getElementById('sgProgressUnlock').textContent =
+          'You have earned ' + REWARDS.xp + ' XP! You unlocked 1 free song preview!';
+      // Grant one free preview
+      setTimeout(() => { this.grantFreePreview('ai_music'); }, 1000);
+    } else {
+      document.getElementById('sgProgressUnlock').textContent =
+          'Earn ' + Math.max(0, xpNeeded - REWARDS.xp) + ' more XP to unlock a free preview!';
+    }
+
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+  },
+
+  grantFreePreview(featureId) {
+    const key = 'mb_free_preview_' + featureId;
+    const used = localStorage.getItem(key);
+    if (used) return false;
+    localStorage.setItem(key, '1');
+    closeSoftGate();
+    showToast('Free preview unlocked! Enjoy!', '🎁', 'success');
+    return true;
+  },
+
+  refresh() {
+    // Re-check all gate states after tier change
+    const tier = BILLING.getTier();
+    // Creator tab availability
+    const creatorBtn = document.getElementById('tab-creator');
+    if (creatorBtn) {
+      creatorBtn.style.opacity = BILLING.isPremium() ? '1' : '0.7';
+      creatorBtn.title = BILLING.isPremium() ? '' : 'Premium feature — upgrade to unlock';
+    }
+  },
+};
+
+function closeSoftGate() {
+  const modal = document.getElementById('softGateModal');
+  modal.style.display = 'none';
+  modal.classList.add('hidden');
+}
+
+// ══════════════════════════════════════════════════════════
+// PHASE 5: ELEVENLABS TTS INTEGRATION
+// Highest quality — most human-sounding, best for children
+// Injected into speakText pipeline before OpenAI fallback
+// ══════════════════════════════════════════════════════════
+async function callElevenLabsTTS(text, voiceId = 'EXAVITQu4vr4xnSDxMaL') {
+  // EXAVITQu4vr4xnSDxMaL = "Bella" — warm, friendly female, ideal for children
+  // Alternative: 21m00Tcm4TlvDq8ikWAM = "Rachel"
+  const key = localStorage.getItem('mb_elevenlabs_key');
+  if (!key) return null;
+  try {
+    const res = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': key,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg',
+      },
+      body: JSON.stringify({
+        text: text.slice(0, 500),
+        model_id: 'eleven_turbo_v2_5',   // fastest + highest quality
+        voice_settings: {
+          stability: 0.45,        // more expressive/variable
+          similarity_boost: 0.85,
+          style: 0.6,             // more character
+          use_speaker_boost: true,
+        },
+      }),
+    });
+    if (!res.ok) throw new Error('ElevenLabs ' + res.status);
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch(e) {
+    console.warn('ElevenLabs TTS error:', e);
+    return null;
+  }
+}
+
+// ── Creator tab gate intercept ────────────────────────────────
+const _origSwitchTab = window.switchTab;
+function switchTabGated(tab) {
+  if (tab === 'creator' && !BILLING.isPremium()) {
+    GATE.fireSoftGate('creator_mode', GATE.FEATURES.creator_mode, { trigger: 'tab_click' });
+    return;
+  }
+  switchTab(tab);
+}
+
 // ── Creator Tab Init ─────────────────────────────────────────
 function initCreatorTab() {
   // Update provider display
@@ -4186,6 +4775,13 @@ async function init() {
   }
   // Auto-save XP every 30s
   setInterval(() => localStorage.setItem('mb_xp', REWARDS.xp.toString()), 30000);
+
+  // Initialize billing system — render settings, check tier, update gates
+  BILLING.renderStatus();
+  BILLING.renderSettingsPlans();
+  BILLING.updateTTSProviderUI();
+  GATE.refresh();
+
   // Load profiles on start
   const r = await api('GET', '/profiles');
   if (r.success && r.data?.length) {
