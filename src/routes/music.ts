@@ -182,6 +182,21 @@ async function callMusicAPI(
 
 // ── TTS Integration ───────────────────────────────────────────
 // Uses OpenAI TTS API, returns base64 data URL for direct playback
+
+/** Strip emoji and music symbols before sending text to TTS */
+function sanitizeTTSText(text: string): string {
+  return text
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')
+    .replace(/[\u{1FA00}-\u{1FAFF}]/gu, '')
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
+    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '')
+    .replace(/\u200D/g, '')
+    .replace(/[♪♫♩♬♭♮♯]/g, '')
+    .replace(/  +/g, ' ')
+    .trim();
+}
+
 async function callTTS(
   text: string,
   childName: string,
@@ -191,6 +206,9 @@ async function callTTS(
     return { audio_url: null, provider: 'demo' };
   }
   
+  const cleanText = sanitizeTTSText(text);
+  if (!cleanText) return { audio_url: null, provider: 'demo' };
+
   try {
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
@@ -200,7 +218,7 @@ async function callTTS(
       },
       body: JSON.stringify({
         model: 'tts-1',
-        input: text.slice(0, 4096), // OpenAI limit
+        input: cleanText.slice(0, 4096), // OpenAI limit
         voice: 'shimmer',   // Warm, friendly female voice
         speed: 0.9,         // Slightly slower for children
         response_format: 'mp3'

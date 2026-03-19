@@ -16,10 +16,10 @@ interface EngagementState {
   talkSingCycle: number;
 }
 
-// Conversation templates for TTS - natural, parent-like
+// Conversation templates for TTS - natural, parent-like (NO emojis — these are spoken aloud)
 const CONVERSATION_TEMPLATES = {
   greeting: [
-    "Hi {name}! Ready to play and sing some songs today? 🎵",
+    "Hi {name}! Ready to play and sing some songs today?",
     "Hey there, {name}! Let's have some fun with music!",
     "Hello {name}! I have some super fun songs just for you!",
     "Yay, {name} is here! Let's make some music magic together!",
@@ -29,24 +29,24 @@ const CONVERSATION_TEMPLATES = {
     "Woohoo! That was so fun, wasn't it {name}? Ready for more?",
     "Great listening, {name}! Did that make you want to dance?",
     "Yay! I love that song too, {name}! Want to hear it again?",
-    "Oh {name}, you're such a great music fan! Here comes another one!",
+    "Oh {name}, you are such a great music fan! Here comes another one!",
   ],
   during_attention: [
-    "Ooh, you're really listening carefully, {name}! I love that!",
+    "Ooh, you are really listening carefully, {name}! I love that!",
     "{name}, your ears are working so well today!",
-    "I can tell you love music, {name}! You're so focused!",
+    "I can tell you love music, {name}! You are so focused!",
   ],
   attention_lost: [
-    "Hey {name}, I've got something even more fun! Listen...",
+    "Hey {name}, I have got something even more fun! Listen...",
     "Psst, {name}! Want to hear a really silly song?",
-    "Oh {name}! I almost forgot — I have your FAVORITE kind of song!",
+    "Oh {name}! I almost forgot — I have your favorite kind of song!",
     "{name}, wake up those dancing feet! Let's try something new!",
   ],
   joy_response: [
-    "Haha, {name}! I can see you're loving this! Keep smiling!",
-    "Look at that smile, {name}! You're making ME happy too!",
+    "Haha, {name}! I can see you are loving this! Keep smiling!",
+    "Look at that smile, {name}! You are making me happy too!",
     "Your smile is the best thing ever, {name}! More music coming!",
-    "Yay {name}! I knew you'd like that! Let's keep going!",
+    "Yay {name}! I knew you would like that! Let's keep going!",
   ],
   repeat_request: [
     "Oh you want that again, {name}? Coming right up!",
@@ -55,12 +55,12 @@ const CONVERSATION_TEMPLATES = {
   ],
   transition: [
     "Okay {name}, get ready... the music is starting!",
-    "Here we go {name}! ♪ ♫ ♪",
+    "Here we go {name}!",
     "Listen carefully, {name}! This one is super special!",
-    "Ready, {name}? One... two... three... let's go!",
+    "Ready, {name}? One, two, three, let's go!",
   ],
   screen_time_warning: [
-    "{name}, we've been playing for a while! Let's finish with one more song, okay?",
+    "{name}, we have been playing for a while! Let's finish with one more song, okay?",
     "Time is flying by, {name}! One last song for today!",
   ]
 };

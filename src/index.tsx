@@ -851,6 +851,35 @@ function getMainHTML(): string {
           <i class="fas fa-key text-yellow-400"></i> API Configuration
           <span class="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full font-bold">Admin Only</span>
         </h3>
+        
+        <!-- Pricing overview -->
+        <div class="glass-light p-4 rounded-xl mb-5">
+          <p class="text-xs font-black text-yellow-300 mb-3 uppercase tracking-wide">💰 Estimated Costs Per Use</p>
+          <div class="space-y-2 text-xs">
+            <div class="flex justify-between items-center">
+              <span class="text-gray-300">🎼 Meta MusicGen (Replicate)</span>
+              <span class="text-green-400 font-bold">~$0.007 / song</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-300">🎻 Google Lyria 2 (Replicate)</span>
+              <span class="text-green-400 font-bold">~$0.060 / song</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-300">⚡ ACE-Step (Replicate)</span>
+              <span class="text-green-400 font-bold">~$0.017 / song</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-300">🗣️ OpenAI TTS (per voice line)</span>
+              <span class="text-green-400 font-bold">~$0.001 / phrase</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-300">🌐 Web Speech API (fallback)</span>
+              <span class="text-blue-400 font-bold">Free — built-in</span>
+            </div>
+          </div>
+          <p class="text-xs text-gray-500 mt-3">A 30-minute session (~15 songs + voice lines) costs approximately <span class="text-white font-bold">$0.12–$1.00</span> depending on model. Web Speech API fallback is always free.</p>
+        </div>
+
         <div class="space-y-4">
           <div>
             <label class="text-sm font-bold text-gray-300 block mb-2">
@@ -1366,23 +1395,27 @@ async function stopSession() {
   updateEngagementUI();
 }
 
-function greetChild() {
+async function greetChild() {
   if (!STATE.selectedChild || !STATE.currentSession) return;
+  // No emojis — these will be spoken aloud
   const greetings = [
-    \`Hi \${STATE.selectedChild.name}! Ready to play and sing some songs today? 🎵\`,
+    \`Hi \${STATE.selectedChild.name}! Ready to play and sing some songs today?\`,
     \`Hey there, \${STATE.selectedChild.name}! Let's have some music fun!\`,
-    \`Yay, \${STATE.selectedChild.name} is here! Time for music magic! ✨\`
+    \`Yay, \${STATE.selectedChild.name} is here! Time for music magic!\`
   ];
-  const text = greetings[Math.floor(Math.random()*greetings.length)];
-  addChatBubble(text, 'ai');
-  speakText(text);
+  const text = greetings[Math.floor(Math.random() * greetings.length)];
+  addChatBubble(text + ' 🌟', 'ai'); // emoji only in chat bubble, not spoken
   
   STATE.lastInteraction = 'talk';
   STATE.lastInteractionTime = Date.now();
   updateStateUI('talk', 'greeting');
+
+  // Await greeting speech to finish, THEN start first song naturally
+  await speakText(text);
   
-  // After greeting, trigger first song
-  setTimeout(() => triggerInteraction('greeting'), 3500);
+  // Small natural pause, then kick off first song cycle
+  await new Promise(r => setTimeout(r, 600));
+  triggerInteraction('greeting');
 }
 
 // ── Auto Cycle ────────────────────────────────────────────────
@@ -1401,73 +1434,82 @@ async function triggerInteraction(trigger = 'manual') {
     return;
   }
   if (STATE.isPlaying) { showToast('Already playing...', 'ℹ️'); return; }
+  if (STATE._interactionInProgress) return; // prevent double-fire
+  STATE._interactionInProgress = true;
 
-  // Determine conversation text
-  const afterSongTexts = [
-    \`You liked that one, huh \${STATE.selectedChild.name}? Let's try another! 🎵\`,
-    \`Woohoo! That was so fun! Ready for more music? 🌟\`,
-    \`Great listening, \${STATE.selectedChild.name}! Did that make you want to dance? 💃\`,
-  ];
-  const transitionTexts = [
-    \`Okay \${STATE.selectedChild.name}, get ready... the music is starting! ♪\`,
-    \`Here we go! ♪ ♫ ♪\`,
-    \`Listen carefully, \${STATE.selectedChild.name}! This one is super special! 🎶\`,
-  ];
+  try {
+    // Conversation texts (no emojis — these will be spoken)
+    const afterSongTexts = [
+      \`You liked that one, huh \${STATE.selectedChild.name}? Let's try another!\`,
+      \`Woohoo! That was so fun! Ready for more music?\`,
+      \`Great listening, \${STATE.selectedChild.name}! Did that make you want to dance?\`,
+      \`Yay! I love that song too! Want to hear another one?\`,
+    ];
+    const transitionTexts = [
+      \`Okay \${STATE.selectedChild.name}, get ready... the music is starting!\`,
+      \`Here we go!\`,
+      \`Listen carefully, \${STATE.selectedChild.name}! This one is super special!\`,
+      \`Ready? One, two, three, let's go!\`,
+    ];
 
-  // Talk first (if coming back from a song or starting)
-  if (STATE.lastInteraction === 'sing' || STATE.lastInteraction === null) {
-    const talkText = STATE.lastInteraction === 'sing'
-      ? afterSongTexts[Math.floor(Math.random()*afterSongTexts.length)]
-      : transitionTexts[0];
-    
-    addChatBubble(talkText, 'ai');
-    speakText(talkText);
-    updateStateUI('talk', trigger);
-    
-    await new Promise(r => setTimeout(r, 2500));
+    // Step 1: Talk first (after a song or at session start)
+    if (STATE.lastInteraction === 'sing' || STATE.lastInteraction === null) {
+      const talkText = STATE.lastInteraction === 'sing'
+        ? afterSongTexts[Math.floor(Math.random() * afterSongTexts.length)]
+        : transitionTexts[0];
+
+      addChatBubble(talkText, 'ai');
+      updateStateUI('talk', trigger);
+      // AWAIT speech completion before doing anything else
+      await speakText(talkText);
+    }
+
+    // Step 2: Generate music (while child waits — show loading state)
+    updateStateUI('generating', trigger);
+    addChatBubble('Generating a new song just for you...', 'ai');
+
+    const r = await api('POST', '/music/generate', {
+      child_id: STATE.selectedChild.id,
+      session_id: STATE.currentSession.id,
+      style: STATE.style,
+      tempo: STATE.tempo,
+      mood: STATE.mood,
+      trigger: trigger,
+      background_song: STATE.bgSong || undefined,
+    });
+
+    if (!r.success) {
+      showToast('Music generation failed: ' + r.error, '❌', 'error');
+      return;
+    }
+
+    const snippet = r.data;
+    STATE.currentSnippet = snippet;
+    STATE.lastInteraction = 'sing';
+    STATE.lastInteractionTime = Date.now();
+    STATE.consecutiveSongs++;
+
+    // Step 3: Speak transition cue, then play music AFTER speech ends
+    const transText = transitionTexts[Math.floor(Math.random() * transitionTexts.length)];
+    addChatBubble(transText, 'ai');
+    updateStateUI('talk', 'transition');
+    // AWAIT — music only starts once the child hears the cue
+    await speakText(transText);
+
+    // Step 4: Now play the music
+    playAudio(snippet.audio_url, snippet.title, snippet.style, snippet.duration_seconds);
+    addCycleEvent('🎵', 'song', snippet.title);
+
+  } finally {
+    STATE._interactionInProgress = false;
   }
-
-  // Now generate and play music
-  updateStateUI('generating', trigger);
-  addChatBubble('🎵 Generating a new song just for you...', 'ai');
-  
-  const r = await api('POST', '/music/generate', {
-    child_id: STATE.selectedChild.id,
-    session_id: STATE.currentSession.id,
-    style: STATE.style,
-    tempo: STATE.tempo,
-    mood: STATE.mood,
-    trigger: trigger,
-    background_song: STATE.bgSong || undefined,
-  });
-
-  if (!r.success) {
-    showToast('Music generation failed: ' + r.error, '❌', 'error');
-    return;
-  }
-
-  const snippet = r.data;
-  STATE.currentSnippet = snippet;
-  STATE.lastInteraction = 'sing';
-  STATE.lastInteractionTime = Date.now();
-  STATE.consecutiveSongs++;
-
-  // Transition text
-  const transText = transitionTexts[Math.floor(Math.random()*transitionTexts.length)];
-  addChatBubble(transText, 'ai');
-  speakText(transText);
-
-  await new Promise(resolve => setTimeout(resolve, 1200));
-
-  // Play the audio
-  playAudio(snippet.audio_url, snippet.title, snippet.style, snippet.duration_seconds);
-  
-  // Update timeline
-  addCycleEvent('🎵', 'song', snippet.title);
 }
 
 // ── Audio Player ──────────────────────────────────────────────
 function playAudio(url, title, style, duration) {
+  // Stop any ongoing TTS speech before music plays
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
   const audio = document.getElementById('audioPlayer');
   audio.src = url;
   audio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
@@ -1498,34 +1540,35 @@ function playAudio(url, title, style, duration) {
   }, 200);
 }
 
-function onAudioEnded() {
+async function onAudioEnded() {
   STATE.isPlaying = false;
   clearInterval(STATE.progressTimer);
   document.getElementById('progressFill').style.width = '100%';
   updateStateUI('talk', 'song_ended');
   
+  // No emojis in spoken text
   const afterTexts = [
-    \`Great song, \${STATE.selectedChild?.name || 'friend'}! Did you like that? 😊\`,
-    \`Yay! That was so fun! Want to hear another one? 🎵\`,
-    \`Wow, you're such a great music listener! More? ✨\`,
+    \`Great song, \${STATE.selectedChild?.name || 'friend'}! Did you like that?\`,
+    \`Yay! That was so fun! Want to hear another one?\`,
+    \`Wow, you are such a great music listener! More?\`,
   ];
-  const t = afterTexts[Math.floor(Math.random()*afterTexts.length)];
-  addChatBubble(t, 'ai');
-  speakText(t);
+  const t = afterTexts[Math.floor(Math.random() * afterTexts.length)];
+  addChatBubble(t + ' 😊', 'ai'); // emoji in chat only
+  
+  // Await speech before doing anything else
+  await speakText(t);
   
   addCycleEvent('💬', 'talk', 'Post-song response');
   STATE.lastInteraction = 'talk';
   
-  // Auto-trigger next if still active (5s cooldown to feel natural, not a rapid loop)
+  // Auto-trigger next if still active (natural pause after speech finishes)
   if (STATE.sessionActive && STATE.mode === 'auto') {
-    setTimeout(() => {
-      if (STATE.sessionActive && STATE.mode === 'auto' && !STATE.isPlaying) {
-        triggerInteraction('auto_after_song');
-      }
-    }, 5000);
+    await new Promise(r => setTimeout(r, 1200)); // brief beat
+    if (STATE.sessionActive && STATE.mode === 'auto' && !STATE.isPlaying) {
+      triggerInteraction('auto_after_song');
+    }
   }
   
-  // Update engagement display
   updateEngagementUI();
 }
 
@@ -1539,24 +1582,22 @@ function resetPlayer() {
   document.getElementById('nowPlayingEmoji').textContent = '🎵';
 }
 
-function repeatSnippet() {
+async function repeatSnippet() {
   if (!STATE.currentSnippet) { showToast('No song to repeat yet', 'ℹ️'); return; }
   if (!STATE.sessionActive) { showToast('Start a session first!', '⚠️', 'warning'); return; }
   
   const repeatTexts = [
-    \`One more time just for you, \${STATE.selectedChild?.name}! 🔁\`,
-    \`You want that again? Sure! Here we go! 🎵\`,
-    \`Coming right up! 🎶\`
+    \`One more time just for you, \${STATE.selectedChild?.name}!\`,
+    \`You want that again? Sure! Here we go!\`,
+    \`Coming right up!\`
   ];
-  const t = repeatTexts[Math.floor(Math.random()*repeatTexts.length)];
-  addChatBubble(t, 'ai');
-  speakText(t);
+  const t = repeatTexts[Math.floor(Math.random() * repeatTexts.length)];
+  addChatBubble(t + ' 🎵', 'ai');
   
-  setTimeout(() => {
-    playAudio(STATE.currentSnippet.audio_url, STATE.currentSnippet.title, 
-              STATE.currentSnippet.style, STATE.currentSnippet.duration_seconds);
-    addCycleEvent('🔁', 'repeat', 'Repeat');
-  }, 1500);
+  await speakText(t);
+  playAudio(STATE.currentSnippet.audio_url, STATE.currentSnippet.title, 
+            STATE.currentSnippet.style, STATE.currentSnippet.duration_seconds);
+  addCycleEvent('🔁', 'repeat', 'Repeat');
 }
 
 function skipSnippet() {
@@ -1606,18 +1647,22 @@ async function sendEngagementCue(type, intensity) {
     if (STATE.isPlaying && STATE.currentSnippet) {
       setTimeout(() => {
         const joyTexts = [
-          \`That smile is everything, \${STATE.selectedChild.name}! 😍\`,
-          \`You're loving this! Keep smiling! 🌟\`,
-          \`I love seeing you happy! 💕\`
+          \`That smile is everything, \${STATE.selectedChild.name}!\`,
+          \`You are loving this! Keep smiling!\`,
+          \`I love seeing you happy!\`
         ];
-        addChatBubble(joyTexts[Math.floor(Math.random()*joyTexts.length)], 'ai');
+        const msg = joyTexts[Math.floor(Math.random() * joyTexts.length)];
+        addChatBubble(msg + ' 😍', 'ai');
+        // Don't speak joy response mid-song — just show in chat
       }, 500);
     }
   }
   if (type === 'laughter') {
     STATE.laughCount++;
     document.getElementById('laughCount').textContent = STATE.laughCount;
-    addChatBubble(\`Haha! You're laughing! That makes me so happy too! 😂🎵\`, 'ai');
+    const laughMsg = \`Haha! You are laughing! That makes me so happy too!\`;
+    addChatBubble(laughMsg + ' 😂🎵', 'ai');
+    if (!STATE.isPlaying) speakText(laughMsg);
     // Boost engagement score
     STATE.engScore = Math.min(100, STATE.engScore + 15);
     updateEngagementScoreUI();
@@ -1628,12 +1673,14 @@ async function sendEngagementCue(type, intensity) {
     updateEngagementScoreUI();
   }
   if (type === 'attention_loss' && STATE.sessionActive && !STATE.isPlaying) {
-    setTimeout(() => {
+    setTimeout(async () => {
       const reengageTexts = [
-        \`Hey \${STATE.selectedChild.name}! I've got something special! 🎵\`,
-        \`Psst! Want to hear a really fun song? 🎶\`,
+        \`Hey \${STATE.selectedChild.name}! I have got something special!\`,
+        \`Want to hear a really fun song?\`,
       ];
-      addChatBubble(reengageTexts[Math.floor(Math.random()*reengageTexts.length)], 'ai');
+      const msg = reengageTexts[Math.floor(Math.random() * reengageTexts.length)];
+      addChatBubble(msg + ' 🎵', 'ai');
+      await speakText(msg);
       if (STATE.mode === 'auto') triggerInteraction('re_engage');
     }, 1000);
   }
@@ -1687,9 +1734,34 @@ async function detectBackground() {
   }
 }
 
+// ── Emoji & symbol stripper (keep letters, numbers, punctuation; drop pictographs) ──
+function stripEmojisAndSymbols(text) {
+  return text
+    // Remove emoji Unicode ranges
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')
+    .replace(/[\u{1F000}-\u{1F02F}]/gu, '')
+    .replace(/[\u{1F0A0}-\u{1F0FF}]/gu, '')
+    .replace(/[\u{1F100}-\u{1F1FF}]/gu, '')
+    .replace(/[\u{1F200}-\u{1F2FF}]/gu, '')
+    .replace(/[\u{1FA00}-\u{1FAFF}]/gu, '')
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')   // variation selectors
+    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '') // skin tone modifiers
+    .replace(/\u200D/g, '')                  // zero-width joiners
+    // Music symbols spoken aloud
+    .replace(/[♪♫♩♬♭♮♯]/g, '')
+    // Trim multiple spaces left over
+    .replace(/  +/g, ' ')
+    .trim();
+}
+
 // ── TTS / Chat ────────────────────────────────────────────────
 // speakText: tries OpenAI TTS first (if key configured), falls back to Web Speech API
+// Returns a Promise that resolves when speech is DONE (so callers can await it)
 async function speakText(text) {
+  const cleanText = stripEmojisAndSymbols(text);
+  if (!cleanText) return;
+
   const openaiKey = localStorage.getItem('mb_openai_key');
   
   // Try OpenAI TTS if key available and session active
@@ -1698,14 +1770,24 @@ async function speakText(text) {
       const r = await api('POST', '/music/tts', {
         child_id: STATE.selectedChild.id,
         session_id: STATE.currentSession.id,
-        text: text,
+        text: cleanText,
         trigger: 'speak'
       });
       if (r.success && r.data?.audio_url && !r.data.demo_mode) {
-        const ttsAudio = new Audio(r.data.audio_url);
-        ttsAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
-        await ttsAudio.play().catch(() => {});
-        return; // Successfully played TTS
+        // Stop any background music while talking
+        const bgAudio = document.getElementById('audioPlayer');
+        if (STATE.isPlaying) bgAudio.volume = Math.max(0.1, bgAudio.volume * 0.3); // duck, don't kill
+        
+        return new Promise((resolve) => {
+          const ttsAudio = new Audio(r.data.audio_url);
+          ttsAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+          ttsAudio.onended = () => {
+            if (STATE.isPlaying) bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+            resolve();
+          };
+          ttsAudio.onerror = () => resolve();
+          ttsAudio.play().catch(() => resolve());
+        });
       }
     } catch (e) {
       // Fall through to Web Speech API
@@ -1713,12 +1795,17 @@ async function speakText(text) {
   }
   
   // Fallback: Web Speech API (built into browser, zero cost, works everywhere)
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
+  if (!('speechSynthesis' in window)) return;
+
+  // Cancel any current utterance
+  window.speechSynthesis.cancel();
+
+  return new Promise((resolve) => {
+    const utter = new SpeechSynthesisUtterance(cleanText);
     utter.rate = parseFloat(document.getElementById('ttsSpeed')?.value || 0.9);
     utter.pitch = 1.2;
     utter.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+    
     // Try to pick a warm, friendly voice
     const voices = window.speechSynthesis.getVoices();
     const friendly = voices.find(v => 
@@ -1729,8 +1816,19 @@ async function speakText(text) {
       (v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
     ) || voices.find(v => v.lang.startsWith('en'));
     if (friendly) utter.voice = friendly;
+
+    utter.onend = () => resolve();
+    utter.onerror = () => resolve();
+
+    // Chromium bug: speechSynthesis sometimes stalls — watchdog
     window.speechSynthesis.speak(utter);
-  }
+    const watchdog = setTimeout(() => {
+      window.speechSynthesis.cancel();
+      resolve();
+    }, (cleanText.length / 10 * 1000) + 4000); // rough upper bound
+    utter.onend = () => { clearTimeout(watchdog); resolve(); };
+    utter.onerror = () => { clearTimeout(watchdog); resolve(); };
+  });
 }
 
 function addChatBubble(text, from = 'ai') {
@@ -1754,11 +1852,12 @@ async function sendCustomTTS() {
     return;
   }
   
+  // speakText strips emojis internally
   speakText(text);
   await api('POST', '/music/tts', {
     child_id: STATE.selectedChild.id,
     session_id: STATE.currentSession.id,
-    text: text,
+    text: stripEmojisAndSymbols(text),
     trigger: 'manual'
   });
 }
