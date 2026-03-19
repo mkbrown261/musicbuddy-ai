@@ -7,6 +7,10 @@ export type Bindings = {
   OPENAI_API_KEY: string;
   SUNO_API_KEY: string;
   GROK_API_KEY: string;
+  REPLICATE_API_KEY: string;
+  ELEVENLABS_API_KEY: string;
+  STRIPE_SECRET_KEY: string;
+  STRIPE_PUBLISHABLE_KEY: string;
 };
 
 // ── Database Models ──────────────────────────────────────────

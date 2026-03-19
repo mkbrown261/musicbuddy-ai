@@ -18,6 +18,11 @@ import { music } from './routes/music'
 import { dashboard } from './routes/dashboard'
 import { intelligence } from './routes/intelligence'
 import { billing } from './routes/billing'
+import { intentRoute } from './routes/intent'
+
+// Bootstrap all Intent Layer modules (runs once at edge startup)
+import { bootstrapModules } from './lib/modules/index'
+bootstrapModules()
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -40,13 +45,14 @@ app.route('/api/music', music)
 app.route('/api/dashboard', dashboard)
 app.route('/api/intelligence', intelligence)
 app.route('/api/billing', billing)
+app.route('/api/intent', intentRoute)
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (c) => {
   return c.json({
     status: 'ok',
     service: 'AI Music Companion for Children',
-    version: '1.0.0',
+    version: '2.0.0-modular',
     timestamp: new Date().toISOString(),
     layers: {
       ui: 'active',
