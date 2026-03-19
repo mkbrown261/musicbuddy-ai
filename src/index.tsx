@@ -1,0 +1,2048 @@
+// ============================================================
+// Main Application Entry Point - src/index.tsx
+// 5-Layer Architecture: UI + API + Logic + Database + Hosting
+// AI Interactive Music & Play Companion for Children
+// ============================================================
+
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
+import { serveStatic } from 'hono/cloudflare-workers'
+import type { Bindings } from './types'
+
+// Route imports
+import { profiles } from './routes/profiles'
+import { sessions } from './routes/sessions'
+import { engagement } from './routes/engagement'
+import { music } from './routes/music'
+import { dashboard } from './routes/dashboard'
+
+const app = new Hono<{ Bindings: Bindings }>()
+
+// ── Middleware ────────────────────────────────────────────────
+app.use('*', logger())
+app.use('/api/*', cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+}))
+
+// ── Static files ──────────────────────────────────────────────
+app.use('/static/*', serveStatic({ root: './' }))
+
+// ── API Routes (API + Logic + Database Layers) ────────────────
+app.route('/api/profiles', profiles)
+app.route('/api/sessions', sessions)
+app.route('/api/engagement', engagement)
+app.route('/api/music', music)
+app.route('/api/dashboard', dashboard)
+
+// ── Health check ──────────────────────────────────────────────
+app.get('/api/health', (c) => {
+  return c.json({
+    status: 'ok',
+    service: 'AI Music Companion for Children',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    layers: {
+      ui: 'active',
+      api: 'active',
+      logic: 'active',
+      database: 'active',
+      hosting: 'cloudflare-pages'
+    }
+  })
+})
+
+// ── Main UI (served from root) ────────────────────────────────
+app.get('/', (c) => {
+  return c.html(getMainHTML())
+})
+
+// Catch-all for SPA routing
+app.get('*', (c) => {
+  const path = c.req.path
+  if (path.startsWith('/api/')) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  return c.html(getMainHTML())
+})
+
+// ── Main HTML Application ─────────────────────────────────────
+function getMainHTML(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎵 MusicBuddy AI – Children's Music Companion</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+    
+    * { box-sizing: border-box; }
+    body { font-family: 'Nunito', sans-serif; background: #0f0a1a; color: #fff; overflow-x: hidden; }
+
+    /* ── Animated background ── */
+    .bg-animated {
+      background: linear-gradient(135deg, #1a0533 0%, #0d1b4b 30%, #0a2a1a 60%, #1a0533 100%);
+      background-size: 400% 400%;
+      animation: bgShift 12s ease infinite;
+    }
+    @keyframes bgShift {
+      0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%}
+    }
+
+    /* ── Stars particles ── */
+    .stars { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .star {
+      position: absolute; border-radius: 50%;
+      background: white; opacity: 0;
+      animation: twinkle var(--d,3s) var(--delay,0s) infinite ease-in-out;
+    }
+    @keyframes twinkle { 0%,100%{opacity:0;transform:scale(0.5)} 50%{opacity:var(--op,0.8);transform:scale(1)} }
+
+    /* ── Floating notes ── */
+    .music-note {
+      position: fixed; pointer-events: none; z-index: 0; font-size: 1.5rem;
+      animation: floatNote linear infinite;
+      opacity: 0;
+    }
+    @keyframes floatNote {
+      0%{transform:translateY(100vh) rotate(0deg);opacity:0}
+      10%{opacity:0.6}
+      90%{opacity:0.4}
+      100%{transform:translateY(-100px) rotate(360deg);opacity:0}
+    }
+
+    /* ── Glassmorphism cards ── */
+    .glass {
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+    }
+    .glass-light {
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 16px;
+    }
+
+    /* ── Profile avatar ring ── */
+    .avatar-ring {
+      border-radius: 50%; padding: 4px;
+      background: conic-gradient(from 0deg, #ff6b9d, #ffd93d, #6bcb77, #4d96ff, #ff6b9d);
+      animation: spin 4s linear infinite;
+      box-shadow: 0 0 30px rgba(255,107,157,0.5);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Music player ── */
+    .player-container {
+      background: linear-gradient(135deg, rgba(255,107,157,0.2), rgba(77,150,255,0.2));
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 24px;
+    }
+    .waveform-bar {
+      width: 4px; border-radius: 2px;
+      background: linear-gradient(to top, #ff6b9d, #ffd93d);
+      transform-origin: bottom;
+      animation: wave var(--d,0.8s) var(--delay,0s) ease-in-out infinite alternate;
+    }
+    @keyframes wave { from{transform:scaleY(0.2)} to{transform:scaleY(1)} }
+
+    /* ── Progress bar ── */
+    .progress-bar {
+      height: 6px; border-radius: 3px;
+      background: rgba(255,255,255,0.15);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(to right, #ff6b9d, #ffd93d);
+      transition: width 0.3s ease;
+    }
+
+    /* ── Engagement indicator ── */
+    .engagement-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      background: linear-gradient(135deg, #ff6b9d, #c44dbb);
+      border: none; border-radius: 50px; padding: 12px 28px;
+      font-weight: 700; font-size: 0.95rem; cursor: pointer;
+      transition: all 0.2s; box-shadow: 0 4px 20px rgba(255,107,157,0.4);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(255,107,157,0.6); }
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 50px; padding: 10px 22px;
+      font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.18); transform: translateY(-1px); }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ff4757, #c0392b);
+      border: none; border-radius: 50px; padding: 10px 22px;
+      font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-success {
+      background: linear-gradient(135deg, #6bcb77, #27ae60);
+      border: none; border-radius: 50px; padding: 10px 22px;
+      font-weight: 700; cursor: pointer; transition: all 0.2s;
+      box-shadow: 0 4px 20px rgba(107,203,119,0.4);
+    }
+    .btn-success:hover { transform: translateY(-2px); }
+
+    /* ── Tabs ── */
+    .tab-btn { transition: all 0.2s; border-radius: 12px; padding: 8px 18px; font-weight: 700; cursor: pointer; }
+    .tab-btn.active { background: linear-gradient(135deg, #ff6b9d, #c44dbb); box-shadow: 0 4px 15px rgba(255,107,157,0.4); }
+    .tab-btn:not(.active) { background: rgba(255,255,255,0.07); }
+    .tab-btn:not(.active):hover { background: rgba(255,255,255,0.12); }
+
+    /* ── Profile card ── */
+    .profile-card { cursor: pointer; transition: all 0.2s; }
+    .profile-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(255,107,157,0.3); }
+    .profile-card.selected { border-color: #ff6b9d !important; box-shadow: 0 0 0 2px #ff6b9d; }
+
+    /* ── Song pill ── */
+    .song-pill {
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 50px; padding: 6px 14px; font-size: 0.82rem;
+      display: inline-flex; align-items: center; gap: 6px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .song-pill:hover { background: rgba(255,107,157,0.2); border-color: #ff6b9d; }
+    .song-pill.active { background: rgba(255,107,157,0.3); border-color: #ff6b9d; }
+
+    /* ── Emotion overlay ── */
+    .emotion-badge {
+      border-radius: 20px; padding: 4px 12px; font-size: 0.78rem; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 4px;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from{opacity:0;transform:scale(0.8)} to{opacity:1;transform:scale(1)} }
+
+    /* ── Camera feed placeholder ── */
+    .camera-feed {
+      background: radial-gradient(ellipse at center, #1a1a2e 0%, #0d0d1a 100%);
+      border: 2px solid rgba(255,255,255,0.1); border-radius: 16px;
+      position: relative; overflow: hidden;
+    }
+    .scan-line {
+      position: absolute; left: 0; right: 0; height: 2px;
+      background: rgba(107,203,119,0.6); box-shadow: 0 0 8px rgba(107,203,119,0.8);
+      animation: scan 3s linear infinite;
+    }
+    @keyframes scan { 0%{top:0%} 100%{top:100%} }
+
+    /* ── Meter bars ── */
+    .meter-fill { transition: width 0.5s ease; border-radius: 4px; height: 100%; }
+
+    /* ── Notification toast ── */
+    #toast {
+      position: fixed; bottom: 30px; right: 30px;
+      background: rgba(30,30,50,0.95); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 14px;
+      padding: 14px 22px; font-size: 0.88rem; font-weight: 600;
+      z-index: 9999; transform: translateY(80px); opacity: 0;
+      transition: all 0.3s ease; min-width: 260px;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── Input fields ── */
+    input, select, textarea {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 10px 14px;
+      color: white; width: 100%; font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none; border-color: #ff6b9d;
+      box-shadow: 0 0 0 3px rgba(255,107,157,0.2);
+    }
+    input::placeholder { color: rgba(255,255,255,0.35); }
+    select option { background: #1a0533; }
+
+    /* ── Screen time ring ── */
+    .ring-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+    .ring-svg { transform: rotate(-90deg); }
+    .ring-circle { transition: stroke-dashoffset 1s ease; }
+    .ring-label { position: absolute; text-align: center; }
+
+    /* ── Chat bubble ── */
+    .chat-bubble {
+      border-radius: 18px 18px 18px 4px;
+      background: linear-gradient(135deg, rgba(255,107,157,0.25), rgba(196,77,187,0.25));
+      border: 1px solid rgba(255,107,157,0.3);
+      padding: 12px 18px; max-width: 80%;
+      animation: slideIn 0.3s ease;
+      position: relative;
+    }
+    .chat-bubble.user { border-radius: 18px 18px 4px 18px; margin-left: auto;
+      background: linear-gradient(135deg, rgba(77,150,255,0.25), rgba(108,77,255,0.25));
+      border-color: rgba(77,150,255,0.3);
+    }
+    @keyframes slideIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,107,157,0.4); border-radius: 3px; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px); z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+      animation: fadeIn 0.2s ease;
+    }
+    .modal-box { max-width: 560px; width: 90%; max-height: 90vh; overflow-y: auto; }
+
+    /* ── Animations ── */
+    .bounce-in { animation: bounceIn 0.5s cubic-bezier(0.68,-0.55,0.27,1.55); }
+    @keyframes bounceIn {
+      0%{transform:scale(0.5);opacity:0}
+      70%{transform:scale(1.1)}
+      100%{transform:scale(1);opacity:1}
+    }
+    .slide-up { animation: slideUp 0.4s ease; }
+    @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    
+    /* ── Gaze indicator ── */
+    .gaze-dot {
+      position: absolute; width: 20px; height: 20px; border-radius: 50%;
+      background: rgba(107,203,119,0.7); box-shadow: 0 0 10px rgba(107,203,119,0.9);
+      pointer-events: none; transform: translate(-50%,-50%);
+      transition: left 0.15s ease, top 0.15s ease;
+      animation: gazeGlow 1s ease-in-out infinite;
+    }
+    @keyframes gazeGlow { 0%,100%{box-shadow:0 0 10px rgba(107,203,119,0.9)} 50%{box-shadow:0 0 20px rgba(107,203,119,1)} }
+  </style>
+</head>
+<body class="bg-animated min-h-screen">
+
+<!-- Stars & Music Notes -->
+<div class="stars" id="stars"></div>
+<div id="musicNotes"></div>
+
+<!-- Toast -->
+<div id="toast"><span id="toastIcon">✨</span> <span id="toastMsg"></span></div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- MAIN APP -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="relative z-10 min-h-screen">
+
+  <!-- ── Header ── -->
+  <header class="glass sticky top-0 z-50 mx-4 mt-4 mb-0 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-xl animate-bounce">🎵</div>
+      <div>
+        <h1 class="text-xl font-black text-white leading-tight">MusicBuddy AI</h1>
+        <p class="text-xs text-purple-300 font-semibold">Interactive Children's Music Companion</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <div id="sessionIndicator" class="hidden items-center gap-2 glass-light px-3 py-1.5 rounded-full text-sm font-bold text-green-400">
+        <div class="engagement-dot bg-green-400"></div>
+        <span>Live Session</span>
+      </div>
+      <button onclick="openModal('addProfileModal')" class="btn-primary text-sm">
+        <i class="fas fa-plus mr-1"></i> New Profile
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Tab Navigation ── -->
+  <div class="mx-4 mt-4 flex gap-2 overflow-x-auto pb-1">
+    <button class="tab-btn active whitespace-nowrap" onclick="switchTab('companion')" id="tab-companion">
+      <i class="fas fa-music mr-1"></i> Companion
+    </button>
+    <button class="tab-btn whitespace-nowrap" onclick="switchTab('profiles')" id="tab-profiles">
+      <i class="fas fa-child mr-1"></i> Profiles
+    </button>
+    <button class="tab-btn whitespace-nowrap" onclick="switchTab('dashboard')" id="tab-dashboard">
+      <i class="fas fa-chart-bar mr-1"></i> Dashboard
+    </button>
+    <button class="tab-btn whitespace-nowrap" onclick="switchTab('library')" id="tab-library">
+      <i class="fas fa-headphones mr-1"></i> Library
+    </button>
+    <button class="tab-btn whitespace-nowrap" onclick="switchTab('settings')" id="tab-settings">
+      <i class="fas fa-sliders-h mr-1"></i> Settings
+    </button>
+  </div>
+
+  <!-- ══════════════════ TAB: COMPANION ══════════════════════ -->
+  <div id="tab-content-companion" class="tab-content px-4 py-4">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+      <!-- ── Left: Camera Feed + Engagement ── -->
+      <div class="lg:col-span-1 space-y-4">
+        
+        <!-- Camera Feed -->
+        <div class="glass p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-black text-sm flex items-center gap-2">
+              <i class="fas fa-camera text-pink-400"></i> Live Vision Feed
+            </h3>
+            <div id="visionStatus" class="text-xs font-bold px-2 py-1 rounded-full bg-gray-700">
+              <i class="fas fa-circle mr-1 text-gray-500"></i>Offline
+            </div>
+          </div>
+          <div class="camera-feed h-52 flex items-center justify-center relative" id="cameraFeed">
+            <div class="scan-line" id="scanLine" style="display:none"></div>
+            <div id="gazeIndicator" class="gaze-dot" style="display:none; left:50%; top:50%"></div>
+            <div id="cameraPlaceholder" class="text-center text-gray-500">
+              <i class="fas fa-video text-4xl mb-2 block opacity-30"></i>
+              <p class="text-xs">Start a session to enable<br/>live monitoring</p>
+            </div>
+            <!-- Emotion overlays -->
+            <div id="emotionOverlays" class="absolute top-2 left-2 flex flex-wrap gap-1"></div>
+          </div>
+          <!-- Gaze metrics -->
+          <div class="mt-3 grid grid-cols-3 gap-2 text-center" id="gazeMetrics">
+            <div class="glass-light p-2 rounded-xl">
+              <div class="text-lg font-black text-pink-400" id="smileCount">0</div>
+              <div class="text-xs text-gray-400">Smiles</div>
+            </div>
+            <div class="glass-light p-2 rounded-xl">
+              <div class="text-lg font-black text-yellow-400" id="laughCount">0</div>
+              <div class="text-xs text-gray-400">Laughs</div>
+            </div>
+            <div class="glass-light p-2 rounded-xl">
+              <div class="text-lg font-black text-green-400" id="fixationTime">0s</div>
+              <div class="text-xs text-gray-400">Focus</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Child -->
+        <div class="glass p-4" id="activeChildCard">
+          <h3 class="font-black text-sm flex items-center gap-2 mb-3">
+            <i class="fas fa-star text-yellow-400"></i> Active Child
+          </h3>
+          <div id="noChildSelected" class="text-center text-gray-500 py-4">
+            <i class="fas fa-child text-3xl mb-2 block opacity-30"></i>
+            <p class="text-xs">Select a profile from the Profiles tab</p>
+          </div>
+          <div id="childInfo" class="hidden">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="avatar-ring w-14 h-14">
+                <div class="w-full h-full rounded-full bg-gradient-to-br from-pink-400 to-purple-600 flex items-center justify-center text-2xl" id="childAvatar">🐰</div>
+              </div>
+              <div>
+                <div class="font-black text-lg" id="childNameDisplay">-</div>
+                <div class="text-xs text-gray-400" id="childAgeDisplay">Age -</div>
+                <div class="text-xs text-purple-300 font-bold" id="childStyleDisplay">-</div>
+              </div>
+            </div>
+            <div id="favoriteSongsDisplay" class="flex flex-wrap gap-1 mb-3"></div>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="startSession()" class="btn-success text-sm w-full" id="startBtn">
+                <i class="fas fa-play mr-1"></i> Start
+              </button>
+              <button onclick="stopSession()" class="btn-danger text-sm w-full hidden" id="stopBtn">
+                <i class="fas fa-stop mr-1"></i> Stop
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Background Listening -->
+        <div class="glass p-4">
+          <h3 class="font-black text-sm flex items-center gap-2 mb-3">
+            <i class="fas fa-satellite-dish text-blue-400"></i> Background Listening
+          </h3>
+          <div class="space-y-2">
+            <input type="text" id="bgSongInput" placeholder="Detected or enter song name..." class="text-sm" />
+            <button onclick="detectBackground()" class="btn-secondary w-full text-sm">
+              <i class="fas fa-search mr-1"></i> Use as Seed Song
+            </button>
+          </div>
+          <div id="bgDetected" class="mt-2 text-xs text-green-400 hidden">
+            <i class="fas fa-check-circle mr-1"></i>
+            <span id="bgDetectedName"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Center: Music Player + Interaction ── -->
+      <div class="lg:col-span-1 space-y-4">
+        
+        <!-- Music Player -->
+        <div class="player-container p-5 glass">
+          <div class="text-center mb-4">
+            <div class="text-4xl mb-2 bounce-in" id="nowPlayingEmoji">🎵</div>
+            <div class="font-black text-lg" id="nowPlayingTitle">Ready to Play!</div>
+            <div class="text-xs text-gray-400 mt-1" id="nowPlayingStyle">Select a child and start a session</div>
+          </div>
+
+          <!-- Waveform -->
+          <div class="flex items-end justify-center gap-1 h-12 mb-4" id="waveform">
+            <div class="waveform-bar h-3" style="--d:0.7s;--delay:0s"></div>
+            <div class="waveform-bar h-5" style="--d:0.9s;--delay:0.1s"></div>
+            <div class="waveform-bar h-8" style="--d:0.6s;--delay:0.2s"></div>
+            <div class="waveform-bar h-6" style="--d:1.0s;--delay:0.05s"></div>
+            <div class="waveform-bar h-10" style="--d:0.8s;--delay:0.15s"></div>
+            <div class="waveform-bar h-7" style="--d:0.7s;--delay:0.3s"></div>
+            <div class="waveform-bar h-4" style="--d:0.9s;--delay:0.25s"></div>
+            <div class="waveform-bar h-9" style="--d:0.6s;--delay:0.1s"></div>
+            <div class="waveform-bar h-6" style="--d:1.1s;--delay:0.2s"></div>
+            <div class="waveform-bar h-3" style="--d:0.8s;--delay:0.05s"></div>
+            <div class="waveform-bar h-8" style="--d:0.7s;--delay:0.35s"></div>
+            <div class="waveform-bar h-5" style="--d:0.9s;--delay:0.15s"></div>
+          </div>
+          <div id="waveformIdle" class="flex items-end justify-center gap-1 h-12 mb-4" style="display:none!important">
+            <!-- idle state bars -->
+          </div>
+
+          <!-- Progress -->
+          <div class="progress-bar mb-3">
+            <div class="progress-fill" id="progressFill" style="width:0%"></div>
+          </div>
+          <div class="flex justify-between text-xs text-gray-400 mb-4">
+            <span id="timeElapsed">0:00</span>
+            <span id="timeDuration">0:25</span>
+          </div>
+
+          <!-- Controls -->
+          <div class="flex justify-center items-center gap-4 mb-4">
+            <button onclick="repeatSnippet()" class="btn-secondary w-10 h-10 rounded-full flex items-center justify-center text-sm" title="Repeat">
+              <i class="fas fa-redo"></i>
+            </button>
+            <button onclick="triggerInteraction('manual')" class="btn-primary w-16 h-16 rounded-full flex items-center justify-center text-2xl" id="playBtn" title="Generate & Play">
+              <i class="fas fa-magic"></i>
+            </button>
+            <button onclick="skipSnippet()" class="btn-secondary w-10 h-10 rounded-full flex items-center justify-center text-sm" title="Skip / Next">
+              <i class="fas fa-forward"></i>
+            </button>
+          </div>
+
+          <!-- Mode toggle -->
+          <div class="flex gap-2 justify-center">
+            <button onclick="setMode('auto')" class="song-pill active" id="modeAuto">🤖 Auto</button>
+            <button onclick="setMode('manual')" class="song-pill" id="modeManual">👆 Manual</button>
+            <button onclick="setMode('background')" class="song-pill" id="modeBg">🔊 BG Listen</button>
+          </div>
+        </div>
+
+        <!-- TTS Chat Bubble Area -->
+        <div class="glass p-4">
+          <h3 class="font-black text-sm flex items-center gap-2 mb-3">
+            <i class="fas fa-comment-dots text-pink-400"></i> AI Companion Says…
+          </h3>
+          <div id="chatArea" class="space-y-3 min-h-24 max-h-48 overflow-y-auto">
+            <div class="chat-bubble text-sm">
+              <span class="text-pink-300 font-black text-xs block mb-1">MusicBuddy 🎵</span>
+              Hi there! I'm ready to play music with you. Select a child profile and start a session! 🌟
+            </div>
+          </div>
+          <div class="flex gap-2 mt-3">
+            <input type="text" id="customTtsInput" placeholder="Type a custom message..." class="text-sm flex-1" />
+            <button onclick="sendCustomTTS()" class="btn-primary px-4 text-sm">
+              <i class="fas fa-paper-plane"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Right: Engagement Triggers + Song Style ── -->
+      <div class="lg:col-span-1 space-y-4">
+        
+        <!-- Engagement Simulation (for demo/testing) -->
+        <div class="glass p-4">
+          <h3 class="font-black text-sm flex items-center gap-2 mb-3">
+            <i class="fas fa-face-smile text-yellow-400"></i> Engagement Cues
+            <span class="text-xs text-gray-400 font-normal">(vision input)</span>
+          </h3>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="sendEngagementCue('smile', 0.7)" class="glass-light p-3 rounded-xl text-center cursor-pointer hover:bg-white hover:bg-opacity-10 transition" id="cueSmile">
+              <div class="text-2xl mb-1">😊</div>
+              <div class="text-xs font-bold">Smile</div>
+            </button>
+            <button onclick="sendEngagementCue('laughter', 0.9)" class="glass-light p-3 rounded-xl text-center cursor-pointer hover:bg-white hover:bg-opacity-10 transition" id="cueLaugh">
+              <div class="text-2xl mb-1">😂</div>
+              <div class="text-xs font-bold">Laughter</div>
+            </button>
+            <button onclick="sendEngagementCue('fixation', 0.8)" class="glass-light p-3 rounded-xl text-center cursor-pointer hover:bg-white hover:bg-opacity-10 transition" id="cueFixation">
+              <div class="text-2xl mb-1">👀</div>
+              <div class="text-xs font-bold">Fixation</div>
+            </button>
+            <button onclick="sendEngagementCue('attention_loss', 0.6)" class="glass-light p-3 rounded-xl text-center cursor-pointer hover:bg-white hover:bg-opacity-10 transition" id="cueAttention">
+              <div class="text-2xl mb-1">😴</div>
+              <div class="text-xs font-bold">Lost Focus</div>
+            </button>
+          </div>
+          <!-- Simulated gaze tracker -->
+          <div class="mt-3">
+            <label class="text-xs text-gray-400 font-bold mb-1 block">Gaze Position (simulate)</label>
+            <div class="glass-light rounded-xl h-20 relative cursor-crosshair" id="gazeSimArea"
+                 onmousemove="updateGaze(event)" onclick="sendGazeCue(event)">
+              <div class="gaze-dot" id="gazeSimDot" style="left:50%;top:50%;"></div>
+              <div class="absolute inset-0 flex items-center justify-center text-xs text-gray-600 pointer-events-none">
+                Click or move to simulate gaze
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interaction State Machine -->
+        <div class="glass p-4">
+          <h3 class="font-black text-sm flex items-center gap-2 mb-3">
+            <i class="fas fa-brain text-purple-400"></i> Interaction State
+          </h3>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between glass-light p-2 rounded-xl">
+              <span class="text-xs font-bold">Current Action</span>
+              <span id="currentAction" class="text-xs font-black text-pink-400">idle</span>
+            </div>
+            <div class="flex items-center justify-between glass-light p-2 rounded-xl">
+              <span class="text-xs font-bold">Cycle Phase</span>
+              <span id="cyclePhase" class="text-xs font-black text-yellow-400">-</span>
+            </div>
+            <div class="flex items-center justify-between glass-light p-2 rounded-xl">
+              <span class="text-xs font-bold">Next Action In</span>
+              <span id="nextActionIn" class="text-xs font-black text-green-400">-</span>
+            </div>
+            <div class="flex items-center justify-between glass-light p-2 rounded-xl">
+              <span class="text-xs font-bold">Engagement Score</span>
+              <div class="flex items-center gap-2">
+                <div class="w-16 h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div id="engScoreBar" class="h-full bg-gradient-to-r from-pink-500 to-yellow-400 rounded-full transition-all" style="width:0%"></div>
+                </div>
+                <span id="engScoreVal" class="text-xs font-black text-yellow-400">0%</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Cycle Timeline -->
+          <div class="mt-3">
+            <label class="text-xs text-gray-400 font-bold mb-2 block">Interaction Timeline</label>
+            <div class="flex items-center gap-1 overflow-x-auto pb-1" id="cycleTimeline">
+              <!-- filled by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Song Style Selector -->
+        <div class="glass p-4">
+          <h3 class="font-black text-sm flex items-center gap-2 mb-3">
+            <i class="fas fa-sliders-h text-blue-400"></i> Music Style
+          </h3>
+          <div class="flex flex-wrap gap-2" id="styleSelector">
+            <button onclick="setStyle('playful')" class="song-pill active" data-style="playful">🎈 Playful</button>
+            <button onclick="setStyle('upbeat')" class="song-pill" data-style="upbeat">⚡ Upbeat</button>
+            <button onclick="setStyle('lullaby')" class="song-pill" data-style="lullaby">🌙 Lullaby</button>
+            <button onclick="setStyle('classical')" class="song-pill" data-style="classical">🎻 Classical</button>
+            <button onclick="setStyle('energetic')" class="song-pill" data-style="energetic">🔥 Energetic</button>
+          </div>
+          <div class="mt-3 flex gap-2">
+            <div class="flex-1">
+              <label class="text-xs text-gray-400 block mb-1">Tempo</label>
+              <select id="tempoSelect" class="text-sm">
+                <option value="slow">🐢 Slow</option>
+                <option value="medium" selected>🚶 Medium</option>
+                <option value="fast">🚀 Fast</option>
+              </select>
+            </div>
+            <div class="flex-1">
+              <label class="text-xs text-gray-400 block mb-1">Mood</label>
+              <select id="moodSelect" class="text-sm">
+                <option value="happy" selected>😊 Happy</option>
+                <option value="calm">😌 Calm</option>
+                <option value="energetic">⚡ Energetic</option>
+                <option value="sleepy">😴 Sleepy</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TAB: PROFILES ══════════════════════ -->
+  <div id="tab-content-profiles" class="tab-content px-4 py-4 hidden">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="profilesGrid">
+      <!-- Profiles rendered here -->
+      <div class="glass p-8 text-center col-span-full" id="profilesLoading">
+        <i class="fas fa-spinner fa-spin text-3xl text-pink-400 mb-3 block"></i>
+        <p class="text-gray-400">Loading profiles...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TAB: DASHBOARD ══════════════════════ -->
+  <div id="tab-content-dashboard" class="tab-content px-4 py-4 hidden">
+    
+    <!-- Profile selector for dashboard -->
+    <div class="glass p-4 mb-4 flex items-center gap-4">
+      <label class="text-sm font-bold whitespace-nowrap">Viewing:</label>
+      <select id="dashboardChildSelect" class="flex-1 text-sm" onchange="loadDashboard(this.value)">
+        <option value="">Select a child profile...</option>
+      </select>
+      <button onclick="loadDashboard(document.getElementById('dashboardChildSelect').value)" class="btn-secondary text-sm">
+        <i class="fas fa-sync mr-1"></i> Refresh
+      </button>
+    </div>
+
+    <div id="dashboardContent" class="hidden">
+      <!-- Top stats row -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div class="glass p-4 text-center">
+          <div class="text-3xl font-black text-pink-400" id="dashSmiles">0</div>
+          <div class="text-xs text-gray-400 mt-1">Smiles Today</div>
+        </div>
+        <div class="glass p-4 text-center">
+          <div class="text-3xl font-black text-yellow-400" id="dashLaughs">0</div>
+          <div class="text-xs text-gray-400 mt-1">Laughs Today</div>
+        </div>
+        <div class="glass p-4 text-center">
+          <div class="text-3xl font-black text-green-400" id="dashSessions">0</div>
+          <div class="text-xs text-gray-400 mt-1">Sessions Today</div>
+        </div>
+        <div class="glass p-4 text-center">
+          <div class="text-3xl font-black text-blue-400" id="dashSongsPlayed">0</div>
+          <div class="text-xs text-gray-400 mt-1">Songs Played</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <!-- Screen time ring -->
+        <div class="glass p-5 text-center">
+          <h3 class="font-black text-sm mb-4 flex items-center gap-2 justify-center">
+            <i class="fas fa-clock text-orange-400"></i> Screen Time Today
+          </h3>
+          <div class="ring-wrap mx-auto" style="width:120px;height:120px">
+            <svg class="ring-svg" width="120" height="120">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="10"/>
+              <circle id="screenTimeRing" cx="60" cy="60" r="50" fill="none"
+                      stroke="url(#ringGrad)" stroke-width="10" stroke-linecap="round"
+                      stroke-dasharray="314" stroke-dashoffset="314" class="ring-circle"/>
+              <defs>
+                <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#ff6b9d"/>
+                  <stop offset="100%" stop-color="#ffd93d"/>
+                </linearGradient>
+              </defs>
+            </svg>
+            <div class="ring-label">
+              <div class="text-xl font-black" id="screenTimeVal">0</div>
+              <div class="text-xs text-gray-400">min</div>
+            </div>
+          </div>
+          <div id="screenTimeAlert" class="hidden mt-3 text-xs text-orange-400 font-bold">
+            <i class="fas fa-exclamation-triangle mr-1"></i> Limit approaching
+          </div>
+          <div class="mt-3 text-xs text-gray-400">Limit: <span id="screenTimeLimit">30</span> min</div>
+        </div>
+
+        <!-- Engagement chart -->
+        <div class="glass p-5">
+          <h3 class="font-black text-sm mb-4 flex items-center gap-2">
+            <i class="fas fa-chart-line text-purple-400"></i> Engagement Overview
+          </h3>
+          <canvas id="engagementChart" height="140"></canvas>
+        </div>
+
+        <!-- Recommendations -->
+        <div class="glass p-5">
+          <h3 class="font-black text-sm mb-4 flex items-center gap-2">
+            <i class="fas fa-lightbulb text-yellow-400"></i> AI Recommendations
+          </h3>
+          <div id="recommendationsList" class="space-y-2">
+            <div class="text-xs text-gray-400">Load a profile to see recommendations.</div>
+          </div>
+        </div>
+
+        <!-- Favorite styles -->
+        <div class="glass p-5">
+          <h3 class="font-black text-sm mb-4 flex items-center gap-2">
+            <i class="fas fa-heart text-pink-400"></i> Favorite Music Styles
+          </h3>
+          <div id="favoriteStylesList" class="space-y-2">
+            <div class="text-xs text-gray-400">No data yet.</div>
+          </div>
+        </div>
+
+        <!-- Top songs -->
+        <div class="glass p-5">
+          <h3 class="font-black text-sm mb-4 flex items-center gap-2">
+            <i class="fas fa-trophy text-yellow-400"></i> Most Loved Songs
+          </h3>
+          <div id="topSongsList" class="space-y-2">
+            <div class="text-xs text-gray-400">No songs generated yet.</div>
+          </div>
+        </div>
+
+        <!-- Adaptive profile -->
+        <div class="glass p-5">
+          <h3 class="font-black text-sm mb-4 flex items-center gap-2">
+            <i class="fas fa-robot text-blue-400"></i> Adaptive Learning
+          </h3>
+          <div class="space-y-3" id="adaptiveData">
+            <div class="text-xs text-gray-400">No learning data yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parental Guidance Rules -->
+      <div class="glass p-5 mt-4">
+        <h3 class="font-black text-sm mb-4 flex items-center gap-2">
+          <i class="fas fa-shield-alt text-green-400"></i> Parental Controls & Guidance
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-2">Screen Time Limit (min)</label>
+            <input type="number" id="ruleScreenTime" min="5" max="120" value="30" class="text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-2">Max Volume (%)</label>
+            <input type="number" id="ruleVolume" min="10" max="100" value="70" class="text-sm" />
+          </div>
+          <div class="flex items-end">
+            <button onclick="saveParentalRules()" class="btn-success w-full text-sm">
+              <i class="fas fa-save mr-1"></i> Save Rules
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="dashboardEmpty" class="glass p-12 text-center">
+      <i class="fas fa-chart-pie text-5xl text-gray-600 mb-4 block"></i>
+      <p class="text-gray-400 font-bold">Select a child profile above to view their dashboard</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TAB: LIBRARY ══════════════════════ -->
+  <div id="tab-content-library" class="tab-content px-4 py-4 hidden">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-black text-xl">🎶 Music Library</h2>
+      <select id="libraryChildSelect" class="text-sm w-56" onchange="loadLibrary(this.value)">
+        <option value="">Select profile...</option>
+      </select>
+    </div>
+    <div id="libraryContent">
+      <div class="glass p-12 text-center">
+        <i class="fas fa-music text-5xl text-gray-600 mb-4 block"></i>
+        <p class="text-gray-400 font-bold">Select a profile to view generated songs</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TAB: SETTINGS ══════════════════════ -->
+  <div id="tab-content-settings" class="tab-content px-4 py-4 hidden">
+    <div class="max-w-2xl mx-auto space-y-4">
+      
+      <div class="glass p-6">
+        <h3 class="font-black text-lg mb-4 flex items-center gap-2">
+          <i class="fas fa-key text-yellow-400"></i> API Configuration
+          <span class="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full font-bold">Admin Only</span>
+        </h3>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm font-bold text-gray-300 block mb-2">
+              🎵 Suno API Key <span class="text-xs text-gray-500">(for AI music generation)</span>
+            </label>
+            <input type="password" id="sunoKeyInput" placeholder="sk-suno-..." class="text-sm" />
+            <p class="text-xs text-gray-500 mt-1">Without a key, demo audio is used. Get yours at sunoapi.org</p>
+          </div>
+          <div>
+            <label class="text-sm font-bold text-gray-300 block mb-2">
+              🤖 OpenAI API Key <span class="text-xs text-gray-500">(for TTS speech)</span>
+            </label>
+            <input type="password" id="openaiKeyInput" placeholder="sk-..." class="text-sm" />
+            <p class="text-xs text-gray-500 mt-1">Used for TTS voice generation (natural child-directed speech)</p>
+          </div>
+          <button onclick="saveApiKeys()" class="btn-primary w-full">
+            <i class="fas fa-save mr-2"></i> Save API Keys (Stored Locally)
+          </button>
+        </div>
+      </div>
+
+      <div class="glass p-6">
+        <h3 class="font-black text-lg mb-4 flex items-center gap-2">
+          <i class="fas fa-volume-up text-blue-400"></i> Audio Settings
+        </h3>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm font-bold text-gray-300 block mb-2">Master Volume: <span id="masterVolumeLabel">70</span>%</label>
+            <input type="range" id="masterVolume" min="0" max="100" value="70" class="w-full" 
+                   oninput="document.getElementById('masterVolumeLabel').textContent=this.value"
+                   style="background:none;border:none;padding:0;accent-color:#ff6b9d" />
+          </div>
+          <div>
+            <label class="text-sm font-bold text-gray-300 block mb-2">TTS Speed</label>
+            <select id="ttsSpeed" class="text-sm">
+              <option value="0.8">🐢 Slow (for young children)</option>
+              <option value="0.9" selected>🚶 Normal</option>
+              <option value="1.0">🏃 Fast</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-bold text-gray-300 block mb-2">Auto-cycle Interval</label>
+            <select id="cycleInterval" class="text-sm">
+              <option value="20000">20 seconds</option>
+              <option value="30000" selected>30 seconds</option>
+              <option value="45000">45 seconds</option>
+              <option value="60000">1 minute</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass p-6">
+        <h3 class="font-black text-lg mb-4 flex items-center gap-2">
+          <i class="fas fa-lock text-green-400"></i> Privacy & Safety
+        </h3>
+        <div class="space-y-3">
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="privacyCamera" class="w-4 h-4" style="width:20px;height:20px;border-radius:4px;accent-color:#ff6b9d" />
+            <span class="text-sm">Enable camera/vision monitoring</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="privacyStore" checked class="w-4 h-4" style="width:20px;height:20px;border-radius:4px;accent-color:#ff6b9d" />
+            <span class="text-sm">Store engagement history for adaptive learning</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="privacyBg" class="w-4 h-4" style="width:20px;height:20px;border-radius:4px;accent-color:#ff6b9d" />
+            <span class="text-sm">Enable background listening detection</span>
+          </label>
+          <div class="text-xs text-gray-500 glass-light p-3 rounded-xl mt-2">
+            <i class="fas fa-shield-alt text-green-400 mr-1"></i>
+            All data is processed locally and stored securely. No audio or video is shared externally without explicit consent. All child data is encrypted at rest.
+          </div>
+        </div>
+      </div>
+
+      <div class="glass p-6">
+        <h3 class="font-black text-lg mb-4 flex items-center gap-2">
+          <i class="fas fa-info-circle text-purple-400"></i> System Info
+        </h3>
+        <div id="systemInfo" class="space-y-2 text-sm text-gray-300"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end main app -->
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- MODALS -->
+<!-- ══════════════════════════════════════════════════════════ -->
+
+<!-- Add Profile Modal -->
+<div id="addProfileModal" class="modal-overlay hidden">
+  <div class="modal-box glass bounce-in">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-xl font-black flex items-center gap-2">
+          <i class="fas fa-child text-pink-400"></i> New Child Profile
+        </h2>
+        <button onclick="closeModal('addProfileModal')" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Child's Name *</label>
+            <input type="text" id="newName" placeholder="Emma" class="text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Age *</label>
+            <input type="number" id="newAge" min="0" max="12" placeholder="4" class="text-sm" />
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Avatar</label>
+          <div class="flex gap-2 flex-wrap">
+            {['🐰 bunny','🦁 lion','⭐ star','🐻 bear','🦊 fox','🐧 penguin'].map(a => {
+              const [emoji, val] = a.split(' ');
+              return \`<button type="button" onclick="selectAvatar('\${val}',this)" 
+                class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="\${val}">\${emoji}</button>\`;
+            }).join('')}
+          </div>
+          <input type="hidden" id="newAvatar" value="bunny" />
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Preferred Musical Style</label>
+          <select id="newStyle" class="text-sm">
+            <option value="playful">🎈 Playful</option>
+            <option value="upbeat">⚡ Upbeat</option>
+            <option value="lullaby">🌙 Lullaby</option>
+            <option value="classical">🎻 Classical</option>
+            <option value="energetic">🔥 Energetic</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Screen Time Limit (minutes/session)</label>
+          <input type="number" id="newScreenTime" min="5" max="120" value="30" class="text-sm" />
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-2">Favorite Songs (add up to 5)</label>
+          <div id="favSongsList" class="space-y-2 mb-2">
+            <div class="flex gap-2">
+              <input type="text" class="fav-song-input text-sm flex-1" placeholder="Song title (e.g. Baby Shark)" />
+              <input type="text" class="fav-artist-input text-sm w-28" placeholder="Artist" />
+            </div>
+          </div>
+          <button type="button" onclick="addSongRow()" class="btn-secondary text-xs">
+            <i class="fas fa-plus mr-1"></i> Add Song
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-3 mt-6">
+        <button onclick="closeModal('addProfileModal')" class="btn-secondary flex-1">Cancel</button>
+        <button onclick="createProfile()" class="btn-primary flex-1">
+          <i class="fas fa-check mr-1"></i> Create Profile
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Audio element for playing snippets -->
+<audio id="audioPlayer" style="display:none" onended="onAudioEnded()"></audio>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT - Full App Logic -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<script>
+// ── App State ────────────────────────────────────────────────
+const STATE = {
+  selectedChild: null,
+  currentSession: null,
+  currentSnippet: null,
+  mode: 'auto',
+  style: 'playful',
+  tempo: 'medium',
+  mood: 'happy',
+  isPlaying: false,
+  isPaused: false,
+  sessionActive: false,
+  cycleTimer: null,
+  progressTimer: null,
+  progressStart: 0,
+  progressDuration: 25000,
+  cycleLog: [],
+  smileCount: 0,
+  laughCount: 0,
+  gazeX: 0.5,
+  gazeY: 0.5,
+  engScore: 0,
+  bgSong: null,
+  lastInteraction: null,
+  lastInteractionTime: 0,
+  consecutiveSongs: 0,
+};
+
+// ── Star & Note animation ────────────────────────────────────
+(function initParticles() {
+  const stars = document.getElementById('stars');
+  const notes = document.getElementById('musicNotes');
+  const noteEmojis = ['🎵','🎶','🎸','🥁','🎹','🎺','🎻','♪','♫'];
+  for (let i = 0; i < 80; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const size = Math.random() * 3 + 1;
+    s.style.cssText = \`width:\${size}px;height:\${size}px;left:\${Math.random()*100}%;top:\${Math.random()*100}%;
+      --d:\${Math.random()*3+2}s;--delay:\${Math.random()*5}s;--op:\${Math.random()*0.6+0.2}\`;
+    stars.appendChild(s);
+  }
+  function spawnNote() {
+    const n = document.createElement('div');
+    n.className = 'music-note';
+    n.textContent = noteEmojis[Math.floor(Math.random()*noteEmojis.length)];
+    const dur = Math.random()*10+8;
+    n.style.cssText = \`left:\${Math.random()*100}%;animation-duration:\${dur}s;animation-delay:\${Math.random()*3}s\`;
+    notes.appendChild(n);
+    setTimeout(() => n.remove(), (dur+3)*1000);
+  }
+  for (let i=0;i<8;i++) spawnNote();
+  setInterval(spawnNote, 3000);
+})();
+
+// ── Toast ────────────────────────────────────────────────────
+function showToast(msg, icon='✨', type='info') {
+  const el = document.getElementById('toast');
+  const colors = {info:'border-blue-500',success:'border-green-500',error:'border-red-500',warning:'border-yellow-500'};
+  document.getElementById('toastMsg').textContent = msg;
+  document.getElementById('toastIcon').textContent = icon;
+  el.style.borderLeftColor = type === 'success' ? '#6bcb77' : type === 'error' ? '#ff4757' : type === 'warning' ? '#ffd93d' : '#4d96ff';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ── Tab switching ─────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-content-' + tab).classList.remove('hidden');
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'profiles') loadProfiles();
+  if (tab === 'dashboard') populateDashboardSelect();
+  if (tab === 'library') populateLibrarySelect();
+  if (tab === 'settings') loadSystemInfo();
+}
+
+// ── Modal ─────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.add('hidden'); });
+});
+
+// ── Avatar selection ──────────────────────────────────────────
+function selectAvatar(val, btn) {
+  document.querySelectorAll('.avatar-opt').forEach(b => b.style.boxShadow = 'none');
+  btn.style.boxShadow = '0 0 0 2px #ff6b9d, 0 0 12px rgba(255,107,157,0.5)';
+  document.getElementById('newAvatar').value = val;
+}
+
+function addSongRow() {
+  const list = document.getElementById('favSongsList');
+  if (list.children.length >= 5) { showToast('Max 5 songs', '⚠️', 'warning'); return; }
+  const row = document.createElement('div');
+  row.className = 'flex gap-2';
+  row.innerHTML = \`<input type="text" class="fav-song-input text-sm flex-1" placeholder="Song title" />
+    <input type="text" class="fav-artist-input text-sm w-28" placeholder="Artist" />
+    <button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-300 px-2">✕</button>\`;
+  list.appendChild(row);
+}
+
+// ── AVATAR EMOJI MAP ──────────────────────────────────────────
+const AVATARS = { bunny:'🐰', lion:'🦁', star:'⭐', bear:'🐻', fox:'🦊', penguin:'🐧', default:'🐾' };
+const STYLE_EMOJIS = { playful:'🎈', upbeat:'⚡', lullaby:'🌙', classical:'🎻', energetic:'🔥', calm:'😌' };
+
+// ── API Helpers ───────────────────────────────────────────────
+async function api(method, path, body) {
+  try {
+    const opts = { method, headers: {'Content-Type':'application/json'} };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch('/api' + path, opts);
+    return await res.json();
+  } catch(e) {
+    console.error('API error:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+// ── Load Profiles ─────────────────────────────────────────────
+async function loadProfiles() {
+  const r = await api('GET', '/profiles');
+  const grid = document.getElementById('profilesGrid');
+  document.getElementById('profilesLoading')?.remove();
+  grid.innerHTML = '';
+  
+  if (!r.success || !r.data?.length) {
+    grid.innerHTML = \`<div class="glass p-8 text-center col-span-full">
+      <div class="text-5xl mb-3">👶</div>
+      <p class="font-bold text-gray-300 mb-4">No profiles yet!</p>
+      <button onclick="openModal('addProfileModal')" class="btn-primary">
+        <i class="fas fa-plus mr-1"></i> Create First Profile
+      </button>
+    </div>\`;
+    return;
+  }
+
+  // Add "New Profile" card
+  grid.innerHTML = \`<div class="glass p-6 profile-card flex flex-col items-center justify-center gap-3 min-h-40 border-dashed border-2 border-white border-opacity-20"
+      onclick="openModal('addProfileModal')">
+    <div class="text-4xl opacity-40">➕</div>
+    <span class="font-bold text-gray-400">Add Profile</span>
+  </div>\`;
+
+  for (const child of r.data) {
+    const card = document.createElement('div');
+    card.className = 'glass profile-card p-5';
+    card.id = 'profile-' + child.id;
+    if (STATE.selectedChild?.id === child.id) card.classList.add('selected');
+    card.innerHTML = \`
+      <div class="flex items-start gap-3 mb-4">
+        <div class="text-3xl">\${AVATARS[child.avatar]||'🐾'}</div>
+        <div class="flex-1 min-w-0">
+          <div class="font-black text-lg truncate">\${child.name}</div>
+          <div class="text-xs text-gray-400">Age \${child.age} • \${STYLE_EMOJIS[child.preferred_style]||''} \${child.preferred_style}</div>
+          <div class="text-xs text-gray-500">Screen limit: \${child.screen_time_limit} min</div>
+        </div>
+        <button onclick="event.stopPropagation();deleteProfile(\${child.id})" 
+          class="text-gray-600 hover:text-red-400 transition text-sm"><i class="fas fa-trash"></i></button>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="selectChild(\${child.id})" class="btn-primary flex-1 text-sm">
+          <i class="fas fa-play mr-1"></i> Select
+        </button>
+        <button onclick="loadDashboard(\${child.id})" class="btn-secondary text-sm px-3">
+          <i class="fas fa-chart-bar"></i>
+        </button>
+      </div>
+    \`;
+    grid.appendChild(card);
+  }
+
+  // Populate dropdowns
+  populateDashboardSelect(r.data);
+  populateLibrarySelect(r.data);
+}
+
+async function createProfile() {
+  const name = document.getElementById('newName').value.trim();
+  const age = parseInt(document.getElementById('newAge').value);
+  if (!name || isNaN(age)) { showToast('Name and age are required!', '⚠️', 'warning'); return; }
+
+  const songs = [];
+  document.querySelectorAll('.fav-song-input').forEach((inp, i) => {
+    const title = inp.value.trim();
+    const artist = document.querySelectorAll('.fav-artist-input')[i]?.value.trim() || '';
+    if (title) songs.push({ song_title: title, artist: artist || null });
+  });
+
+  const r = await api('POST', '/profiles', {
+    name, age,
+    avatar: document.getElementById('newAvatar').value,
+    preferred_style: document.getElementById('newStyle').value,
+    screen_time_limit: parseInt(document.getElementById('newScreenTime').value) || 30,
+    favorite_songs: songs
+  });
+
+  if (r.success) {
+    showToast(\`Profile for \${name} created! 🎉\`, '🎉', 'success');
+    closeModal('addProfileModal');
+    loadProfiles();
+  } else {
+    showToast('Error: ' + r.error, '❌', 'error');
+  }
+}
+
+async function deleteProfile(id) {
+  if (!confirm('Delete this profile and all its data?')) return;
+  const r = await api('DELETE', '/profiles/' + id);
+  if (r.success) {
+    showToast('Profile deleted', '🗑️');
+    if (STATE.selectedChild?.id === id) { STATE.selectedChild = null; updateChildUI(); }
+    loadProfiles();
+  }
+}
+
+async function selectChild(id) {
+  const r = await api('GET', '/profiles/' + id);
+  if (!r.success) return;
+  STATE.selectedChild = r.data.child;
+  STATE.selectedChild.songs = r.data.songs;
+  STATE.selectedChild.adaptive = r.data.adaptive;
+  
+  updateChildUI();
+  switchTab('companion');
+  showToast(\`Selected \${r.data.child.name}! 🌟\`, '⭐', 'success');
+  document.querySelectorAll('.profile-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('profile-' + id)?.classList.add('selected');
+}
+
+function updateChildUI() {
+  const child = STATE.selectedChild;
+  if (!child) {
+    document.getElementById('noChildSelected').classList.remove('hidden');
+    document.getElementById('childInfo').classList.add('hidden');
+    return;
+  }
+  document.getElementById('noChildSelected').classList.add('hidden');
+  document.getElementById('childInfo').classList.remove('hidden');
+  document.getElementById('childAvatar').textContent = AVATARS[child.avatar] || '🐾';
+  document.getElementById('childNameDisplay').textContent = child.name;
+  document.getElementById('childAgeDisplay').textContent = 'Age ' + child.age;
+  document.getElementById('childStyleDisplay').textContent = (STYLE_EMOJIS[child.preferred_style]||'') + ' ' + child.preferred_style;
+  
+  const songsPills = document.getElementById('favoriteSongsDisplay');
+  songsPills.innerHTML = (child.songs || []).slice(0, 4).map(s =>
+    \`<span class="song-pill">\${s.song_title}</span>\`
+  ).join('') + (child.songs?.length > 4 ? \`<span class="text-xs text-gray-500">+\${child.songs.length-4} more</span>\` : '');
+  
+  // Set style from child preference
+  STATE.style = child.preferred_style || 'playful';
+  updateStyleUI();
+}
+
+// ── Session Management ────────────────────────────────────────
+async function startSession() {
+  if (!STATE.selectedChild) { showToast('Select a child profile first!', '⚠️', 'warning'); return; }
+  if (STATE.sessionActive) return;
+
+  const r = await api('POST', '/sessions/start', { child_id: STATE.selectedChild.id, mode: STATE.mode });
+  if (!r.success) { showToast('Error starting session: ' + r.error, '❌', 'error'); return; }
+
+  STATE.currentSession = r.data.session;
+  STATE.sessionActive = true;
+  STATE.smileCount = 0;
+  STATE.laughCount = 0;
+  STATE.cycleLog = [];
+  STATE.engScore = 0;
+
+  document.getElementById('startBtn').classList.add('hidden');
+  document.getElementById('stopBtn').classList.remove('hidden');
+  document.getElementById('sessionIndicator').style.display = 'flex';
+  
+  // Start camera simulation
+  document.getElementById('scanLine').style.display = 'block';
+  document.getElementById('cameraPlaceholder').innerHTML = \`
+    <div class="text-center">
+      <i class="fas fa-eye text-green-400 text-3xl mb-2 block"></i>
+      <p class="text-xs text-green-400 font-bold">Monitoring Active</p>
+      <p class="text-xs text-gray-500 mt-1">\${STATE.selectedChild.name} detected</p>
+    </div>\`;
+  
+  document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live';
+  document.getElementById('visionStatus').className = 'text-xs font-bold px-2 py-1 rounded-full bg-green-900 text-green-300';
+
+  addChatBubble(\`Session started for \${STATE.selectedChild.name}! 🎉\`, 'ai');
+  
+  showToast(\`Session started! Let's play with \${STATE.selectedChild.name}! 🎵\`, '🎵', 'success');
+
+  // Greet the child
+  setTimeout(() => greetChild(), 500);
+  
+  // Start auto-cycle if in auto mode
+  if (STATE.mode === 'auto') startAutoCycle();
+}
+
+async function stopSession() {
+  if (!STATE.currentSession) return;
+  clearInterval(STATE.cycleTimer);
+  clearInterval(STATE.progressTimer);
+  
+  const audio = document.getElementById('audioPlayer');
+  audio.pause();
+  STATE.isPlaying = false;
+
+  const r = await api('POST', \`/sessions/\${STATE.currentSession.id}/stop\`);
+  
+  STATE.sessionActive = false;
+  STATE.currentSession = null;
+
+  document.getElementById('startBtn').classList.remove('hidden');
+  document.getElementById('stopBtn').classList.add('hidden');
+  document.getElementById('sessionIndicator').style.display = 'none';
+  document.getElementById('scanLine').style.display = 'none';
+  document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-gray-500"></i>Offline';
+  document.getElementById('visionStatus').className = 'text-xs font-bold px-2 py-1 rounded-full bg-gray-700';
+  document.getElementById('cameraPlaceholder').innerHTML = \`
+    <i class="fas fa-video text-4xl mb-2 block opacity-30"></i>
+    <p class="text-xs">Start a session to enable<br/>live monitoring</p>\`;
+  document.getElementById('emotionOverlays').innerHTML = '';
+
+  resetPlayer();
+  addChatBubble('Great session! See you next time! 👋', 'ai');
+  showToast('Session ended. Great engagement! 🌟', '✅', 'success');
+  
+  updateEngagementUI();
+}
+
+function greetChild() {
+  if (!STATE.selectedChild || !STATE.currentSession) return;
+  const greetings = [
+    \`Hi \${STATE.selectedChild.name}! Ready to play and sing some songs today? 🎵\`,
+    \`Hey there, \${STATE.selectedChild.name}! Let's have some music fun!\`,
+    \`Yay, \${STATE.selectedChild.name} is here! Time for music magic! ✨\`
+  ];
+  const text = greetings[Math.floor(Math.random()*greetings.length)];
+  addChatBubble(text, 'ai');
+  speakText(text);
+  
+  STATE.lastInteraction = 'talk';
+  STATE.lastInteractionTime = Date.now();
+  updateStateUI('talk', 'greeting');
+  
+  // After greeting, trigger first song
+  setTimeout(() => triggerInteraction('greeting'), 3500);
+}
+
+// ── Auto Cycle ────────────────────────────────────────────────
+function startAutoCycle() {
+  const interval = parseInt(document.getElementById('cycleInterval')?.value || 30000);
+  STATE.cycleTimer = setInterval(() => {
+    if (!STATE.sessionActive || STATE.isPlaying) return;
+    triggerInteraction('auto_cycle');
+  }, interval);
+}
+
+// ── Interaction Trigger ───────────────────────────────────────
+async function triggerInteraction(trigger = 'manual') {
+  if (!STATE.selectedChild || !STATE.currentSession) {
+    showToast('Start a session first!', '⚠️', 'warning');
+    return;
+  }
+  if (STATE.isPlaying) { showToast('Already playing...', 'ℹ️'); return; }
+
+  // Determine conversation text
+  const afterSongTexts = [
+    \`You liked that one, huh \${STATE.selectedChild.name}? Let's try another! 🎵\`,
+    \`Woohoo! That was so fun! Ready for more music? 🌟\`,
+    \`Great listening, \${STATE.selectedChild.name}! Did that make you want to dance? 💃\`,
+  ];
+  const transitionTexts = [
+    \`Okay \${STATE.selectedChild.name}, get ready... the music is starting! ♪\`,
+    \`Here we go! ♪ ♫ ♪\`,
+    \`Listen carefully, \${STATE.selectedChild.name}! This one is super special! 🎶\`,
+  ];
+
+  // Talk first (if coming back from a song or starting)
+  if (STATE.lastInteraction === 'sing' || STATE.lastInteraction === null) {
+    const talkText = STATE.lastInteraction === 'sing'
+      ? afterSongTexts[Math.floor(Math.random()*afterSongTexts.length)]
+      : transitionTexts[0];
+    
+    addChatBubble(talkText, 'ai');
+    speakText(talkText);
+    updateStateUI('talk', trigger);
+    
+    await new Promise(r => setTimeout(r, 2500));
+  }
+
+  // Now generate and play music
+  updateStateUI('generating', trigger);
+  addChatBubble('🎵 Generating a new song just for you...', 'ai');
+  
+  const r = await api('POST', '/music/generate', {
+    child_id: STATE.selectedChild.id,
+    session_id: STATE.currentSession.id,
+    style: STATE.style,
+    tempo: STATE.tempo,
+    mood: STATE.mood,
+    trigger: trigger,
+    background_song: STATE.bgSong || undefined,
+  });
+
+  if (!r.success) {
+    showToast('Music generation failed: ' + r.error, '❌', 'error');
+    return;
+  }
+
+  const snippet = r.data;
+  STATE.currentSnippet = snippet;
+  STATE.lastInteraction = 'sing';
+  STATE.lastInteractionTime = Date.now();
+  STATE.consecutiveSongs++;
+
+  // Transition text
+  const transText = transitionTexts[Math.floor(Math.random()*transitionTexts.length)];
+  addChatBubble(transText, 'ai');
+  speakText(transText);
+
+  await new Promise(resolve => setTimeout(resolve, 1200));
+
+  // Play the audio
+  playAudio(snippet.audio_url, snippet.title, snippet.style, snippet.duration_seconds);
+  
+  // Update timeline
+  addCycleEvent('🎵', 'song', snippet.title);
+}
+
+// ── Audio Player ──────────────────────────────────────────────
+function playAudio(url, title, style, duration) {
+  const audio = document.getElementById('audioPlayer');
+  audio.src = url;
+  audio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+  audio.play().catch(() => {
+    showToast('Auto-play blocked. Click play button.', '🔊', 'warning');
+  });
+  
+  STATE.isPlaying = true;
+  STATE.progressStart = Date.now();
+  STATE.progressDuration = (duration || 25) * 1000;
+  
+  document.getElementById('nowPlayingTitle').textContent = title || 'AI Music Snippet';
+  document.getElementById('nowPlayingStyle').textContent = (STYLE_EMOJIS[style]||'🎵') + ' ' + style + ' • AI Generated';
+  document.getElementById('nowPlayingEmoji').textContent = STYLE_EMOJIS[style] || '🎵';
+  document.getElementById('timeDuration').textContent = \`0:\${String(duration||25).padStart(2,'0')}\`;
+  
+  updateStateUI('sing', 'playing');
+  
+  // Progress tracking
+  clearInterval(STATE.progressTimer);
+  STATE.progressTimer = setInterval(() => {
+    const elapsed = Date.now() - STATE.progressStart;
+    const pct = Math.min(100, (elapsed / STATE.progressDuration) * 100);
+    document.getElementById('progressFill').style.width = pct + '%';
+    const secs = Math.floor(elapsed / 1000);
+    document.getElementById('timeElapsed').textContent = \`0:\${String(secs).padStart(2,'0')}\`;
+    if (pct >= 100) clearInterval(STATE.progressTimer);
+  }, 200);
+}
+
+function onAudioEnded() {
+  STATE.isPlaying = false;
+  clearInterval(STATE.progressTimer);
+  document.getElementById('progressFill').style.width = '100%';
+  updateStateUI('talk', 'song_ended');
+  
+  const afterTexts = [
+    \`Great song, \${STATE.selectedChild?.name || 'friend'}! Did you like that? 😊\`,
+    \`Yay! That was so fun! Want to hear another one? 🎵\`,
+    \`Wow, you're such a great music listener! More? ✨\`,
+  ];
+  const t = afterTexts[Math.floor(Math.random()*afterTexts.length)];
+  addChatBubble(t, 'ai');
+  speakText(t);
+  
+  addCycleEvent('💬', 'talk', 'Post-song response');
+  STATE.lastInteraction = 'talk';
+  
+  // Auto-trigger next if still active
+  if (STATE.sessionActive && STATE.mode === 'auto') {
+    setTimeout(() => triggerInteraction('auto_after_song'), 4000);
+  }
+  
+  // Update engagement display
+  updateEngagementUI();
+}
+
+function resetPlayer() {
+  clearInterval(STATE.progressTimer);
+  STATE.isPlaying = false;
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('timeElapsed').textContent = '0:00';
+  document.getElementById('nowPlayingTitle').textContent = 'Ready to Play!';
+  document.getElementById('nowPlayingStyle').textContent = 'Select a child and start a session';
+  document.getElementById('nowPlayingEmoji').textContent = '🎵';
+}
+
+function repeatSnippet() {
+  if (!STATE.currentSnippet) { showToast('No song to repeat yet', 'ℹ️'); return; }
+  if (!STATE.sessionActive) { showToast('Start a session first!', '⚠️', 'warning'); return; }
+  
+  const repeatTexts = [
+    \`One more time just for you, \${STATE.selectedChild?.name}! 🔁\`,
+    \`You want that again? Sure! Here we go! 🎵\`,
+    \`Coming right up! 🎶\`
+  ];
+  const t = repeatTexts[Math.floor(Math.random()*repeatTexts.length)];
+  addChatBubble(t, 'ai');
+  speakText(t);
+  
+  setTimeout(() => {
+    playAudio(STATE.currentSnippet.audio_url, STATE.currentSnippet.title, 
+              STATE.currentSnippet.style, STATE.currentSnippet.duration_seconds);
+    addCycleEvent('🔁', 'repeat', 'Repeat');
+  }, 1500);
+}
+
+function skipSnippet() {
+  if (!STATE.sessionActive) { showToast('Start a session first!', '⚠️', 'warning'); return; }
+  const audio = document.getElementById('audioPlayer');
+  audio.pause();
+  STATE.isPlaying = false;
+  clearInterval(STATE.progressTimer);
+  triggerInteraction('skip');
+}
+
+// ── Engagement Cue Handling ────────────────────────────────────
+async function sendEngagementCue(type, intensity) {
+  if (!STATE.currentSession) { showToast('Start a session to log engagement', '⚠️', 'warning'); return; }
+
+  const r = await api('POST', '/engagement/event', {
+    child_id: STATE.selectedChild.id,
+    session_id: STATE.currentSession.id,
+    event_type: type,
+    intensity: intensity,
+    duration_ms: 800 + Math.floor(Math.random()*1200),
+    gaze_x: STATE.gazeX,
+    gaze_y: STATE.gazeY,
+    snippet_id: STATE.currentSnippet?.snippet_id || null
+  });
+
+  if (!r.success) return;
+
+  // Visual feedback
+  const badge = document.createElement('div');
+  badge.className = 'emotion-badge';
+  const colors = { smile:'bg-yellow-500 bg-opacity-80', laughter:'bg-pink-500 bg-opacity-80',
+    fixation:'bg-green-500 bg-opacity-80', attention_loss:'bg-gray-500 bg-opacity-80', boredom:'bg-blue-900 bg-opacity-80' };
+  const icons = { smile:'😊', laughter:'😂', fixation:'👀', attention_loss:'😴', boredom:'🥱' };
+  badge.className = \`emotion-badge \${colors[type]||'bg-gray-600'}\`;
+  badge.innerHTML = \`\${icons[type]||'•'} \${type.replace('_',' ')}\`;
+  const overlay = document.getElementById('emotionOverlays');
+  overlay.appendChild(badge);
+  setTimeout(() => badge.remove(), 3000);
+
+  // Update counters
+  if (type === 'smile') {
+    STATE.smileCount++;
+    document.getElementById('smileCount').textContent = STATE.smileCount;
+    
+    // Trigger joy response if playing
+    if (STATE.isPlaying && STATE.currentSnippet) {
+      setTimeout(() => {
+        const joyTexts = [
+          \`That smile is everything, \${STATE.selectedChild.name}! 😍\`,
+          \`You're loving this! Keep smiling! 🌟\`,
+          \`I love seeing you happy! 💕\`
+        ];
+        addChatBubble(joyTexts[Math.floor(Math.random()*joyTexts.length)], 'ai');
+      }, 500);
+    }
+  }
+  if (type === 'laughter') {
+    STATE.laughCount++;
+    document.getElementById('laughCount').textContent = STATE.laughCount;
+    addChatBubble(\`Haha! You're laughing! That makes me so happy too! 😂🎵\`, 'ai');
+    // Boost engagement score
+    STATE.engScore = Math.min(100, STATE.engScore + 15);
+    updateEngagementScoreUI();
+  }
+  if (type === 'fixation') {
+    document.getElementById('fixationTime').textContent = Math.floor(Math.random()*8+2) + 's';
+    STATE.engScore = Math.min(100, STATE.engScore + 8);
+    updateEngagementScoreUI();
+  }
+  if (type === 'attention_loss' && STATE.sessionActive && !STATE.isPlaying) {
+    setTimeout(() => {
+      const reengageTexts = [
+        \`Hey \${STATE.selectedChild.name}! I've got something special! 🎵\`,
+        \`Psst! Want to hear a really fun song? 🎶\`,
+      ];
+      addChatBubble(reengageTexts[Math.floor(Math.random()*reengageTexts.length)], 'ai');
+      if (STATE.mode === 'auto') triggerInteraction('re_engage');
+    }, 1000);
+  }
+  
+  addCycleEvent(icons[type]||'•', type, \`Detected: \${type}\`);
+  showToast(\`\${type} detected (intensity: \${(intensity*100).toFixed(0)}%)\`, icons[type]||'•');
+}
+
+function updateGaze(e) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  STATE.gazeX = (e.clientX - rect.left) / rect.width;
+  STATE.gazeY = (e.clientY - rect.top) / rect.height;
+  const dot = document.getElementById('gazeSimDot');
+  dot.style.left = (STATE.gazeX * 100) + '%';
+  dot.style.top = (STATE.gazeY * 100) + '%';
+  
+  // Update camera gaze indicator
+  const camDot = document.getElementById('gazeIndicator');
+  const cam = document.getElementById('cameraFeed');
+  if (STATE.sessionActive) {
+    camDot.style.display = 'block';
+    camDot.style.left = (STATE.gazeX * 100) + '%';
+    camDot.style.top = (STATE.gazeY * 100) + '%';
+  }
+}
+
+function sendGazeCue(e) {
+  sendEngagementCue('fixation', 0.7 + Math.random() * 0.3);
+}
+
+// ── Background listening ──────────────────────────────────────
+async function detectBackground() {
+  if (!STATE.selectedChild || !STATE.currentSession) {
+    showToast('Start a session first!', '⚠️', 'warning'); return;
+  }
+  const song = document.getElementById('bgSongInput').value.trim();
+  if (!song) { showToast('Enter a song name first', '⚠️', 'warning'); return; }
+  
+  const r = await api('POST', '/engagement/background-detect', {
+    child_id: STATE.selectedChild.id,
+    session_id: STATE.currentSession.id,
+    detected_song: song,
+    confidence: 0.85
+  });
+  
+  if (r.success) {
+    STATE.bgSong = song;
+    document.getElementById('bgDetected').classList.remove('hidden');
+    document.getElementById('bgDetectedName').textContent = \`"\${song}" will be used as seed\`;
+    showToast(\`"${song}" set as music seed! 🎵\`, '🎵', 'success');
+  }
+}
+
+// ── TTS / Chat ────────────────────────────────────────────────
+function speakText(text) {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = parseFloat(document.getElementById('ttsSpeed')?.value || 0.9);
+    utter.pitch = 1.2;
+    utter.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+    // Try to pick a friendly voice
+    const voices = window.speechSynthesis.getVoices();
+    const friendly = voices.find(v => v.name.includes('Samantha') || v.name.includes('Google UK') || v.name.includes('Female'));
+    if (friendly) utter.voice = friendly;
+    window.speechSynthesis.speak(utter);
+  }
+}
+
+function addChatBubble(text, from = 'ai') {
+  const area = document.getElementById('chatArea');
+  const bubble = document.createElement('div');
+  bubble.className = \`chat-bubble text-sm \${from === 'user' ? 'user' : ''}\`;
+  if (from === 'ai') bubble.innerHTML = \`<span class="text-pink-300 font-black text-xs block mb-1">MusicBuddy 🎵</span>\${text}\`;
+  else bubble.innerHTML = \`<span class="text-blue-300 font-black text-xs block mb-1">You</span>\${text}\`;
+  area.appendChild(bubble);
+  area.scrollTop = area.scrollHeight;
+}
+
+async function sendCustomTTS() {
+  const text = document.getElementById('customTtsInput').value.trim();
+  if (!text) return;
+  addChatBubble(text, 'user');
+  document.getElementById('customTtsInput').value = '';
+  
+  if (!STATE.currentSession || !STATE.selectedChild) {
+    addChatBubble("I'm not in a session right now. Start one to play!", 'ai');
+    return;
+  }
+  
+  speakText(text);
+  await api('POST', '/music/tts', {
+    child_id: STATE.selectedChild.id,
+    session_id: STATE.currentSession.id,
+    text: text,
+    trigger: 'manual'
+  });
+}
+
+// ── Mode & Style ──────────────────────────────────────────────
+function setMode(mode) {
+  STATE.mode = mode;
+  ['auto','manual','background'].forEach(m => {
+    document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1))?.classList.toggle('active', m === mode);
+  });
+  clearInterval(STATE.cycleTimer);
+  if (mode === 'auto' && STATE.sessionActive) startAutoCycle();
+  showToast(\`Mode: \${mode}\`, '⚙️');
+}
+
+function setStyle(style) {
+  STATE.style = style;
+  updateStyleUI();
+}
+
+function updateStyleUI() {
+  document.querySelectorAll('[data-style]').forEach(b => {
+    b.classList.toggle('active', b.dataset.style === STATE.style);
+  });
+}
+
+// ── State UI Updates ──────────────────────────────────────────
+function updateStateUI(action, phase) {
+  document.getElementById('currentAction').textContent = action;
+  document.getElementById('cyclePhase').textContent = phase || '-';
+  
+  const stateColors = {
+    talk: 'text-yellow-400', sing: 'text-pink-400', 
+    generating: 'text-blue-400', wait: 'text-gray-400', idle: 'text-gray-600'
+  };
+  const el = document.getElementById('currentAction');
+  el.className = 'text-xs font-black ' + (stateColors[action] || 'text-white');
+}
+
+function updateEngagementScoreUI() {
+  const pct = Math.min(100, STATE.engScore);
+  document.getElementById('engScoreBar').style.width = pct + '%';
+  document.getElementById('engScoreVal').textContent = pct + '%';
+}
+
+function updateEngagementUI() {
+  document.getElementById('smileCount').textContent = STATE.smileCount;
+  document.getElementById('laughCount').textContent = STATE.laughCount;
+  updateEngagementScoreUI();
+}
+
+function addCycleEvent(icon, type, label) {
+  STATE.cycleLog.push({ icon, type, label, time: Date.now() });
+  const timeline = document.getElementById('cycleTimeline');
+  const badge = document.createElement('div');
+  const colors = {
+    song: 'bg-pink-900 text-pink-300',
+    talk: 'bg-yellow-900 text-yellow-300',
+    smile: 'bg-yellow-900 text-yellow-300',
+    laughter: 'bg-pink-900 text-pink-300',
+    fixation: 'bg-green-900 text-green-300',
+    attention_loss: 'bg-gray-800 text-gray-400',
+    repeat: 'bg-purple-900 text-purple-300',
+    greeting: 'bg-blue-900 text-blue-300',
+  };
+  badge.className = \`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap \${colors[type]||'bg-gray-800 text-gray-400'}\`;
+  badge.textContent = icon + ' ' + label.slice(0, 12);
+  timeline.appendChild(badge);
+  timeline.scrollLeft = timeline.scrollWidth;
+}
+
+// ── Dashboard ─────────────────────────────────────────────────
+function populateDashboardSelect(profiles) {
+  const sel = document.getElementById('dashboardChildSelect');
+  if (!profiles) return;
+  sel.innerHTML = '<option value="">Select a child profile...</option>';
+  profiles.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = \`\${AVATARS[p.avatar]||'🐾'} \${p.name} (Age \${p.age})\`;
+    sel.appendChild(opt);
+  });
+}
+
+async function loadDashboard(childId) {
+  if (!childId) return;
+  
+  const r = await api('GET', '/dashboard/' + childId);
+  if (!r.success) { showToast('Error loading dashboard', '❌', 'error'); return; }
+  
+  const d = r.data;
+  switchTab('dashboard');
+  document.getElementById('dashboardChildSelect').value = childId;
+  document.getElementById('dashboardContent').classList.remove('hidden');
+  document.getElementById('dashboardEmpty').classList.add('hidden');
+
+  // Stats
+  document.getElementById('dashSmiles').textContent = d.engagement_summary?.smile_count ?? 0;
+  document.getElementById('dashLaughs').textContent = d.engagement_summary?.laughter_count ?? 0;
+  document.getElementById('dashSessions').textContent = d.today_sessions ?? 0;
+  document.getElementById('dashSongsPlayed').textContent = d.adaptive_profile?.total_songs_played ?? 0;
+
+  // Screen time ring
+  const mins = d.total_time_today_minutes || 0;
+  const limit = d.screen_time_limit_minutes || 30;
+  const pct = Math.min(1, mins / limit);
+  const circumference = 314;
+  document.getElementById('screenTimeRing').style.strokeDashoffset = circumference * (1 - pct);
+  document.getElementById('screenTimeVal').textContent = mins.toFixed(0);
+  document.getElementById('screenTimeLimit').textContent = limit;
+  if (d.screen_time_alert) document.getElementById('screenTimeAlert').classList.remove('hidden');
+  else document.getElementById('screenTimeAlert').classList.add('hidden');
+
+  // Engagement chart
+  const ctx = document.getElementById('engagementChart').getContext('2d');
+  if (window._engChart) window._engChart.destroy();
+  window._engChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Smiles', 'Laughs', 'Focus', 'Neutral'],
+      datasets: [{
+        data: [
+          d.engagement_summary?.smile_count || 0,
+          d.engagement_summary?.laughter_count || 0,
+          Math.round((d.engagement_summary?.avg_fixation_ms || 0) / 1000),
+          Math.max(0, 10 - (d.engagement_summary?.smile_count || 0) - (d.engagement_summary?.laughter_count || 0))
+        ],
+        backgroundColor: ['#ffd93d88','#ff6b9d88','#6bcb7788','#4d96ff44'],
+        borderColor: ['#ffd93d','#ff6b9d','#6bcb77','#4d96ff'],
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#ccc', font: { size: 11 } } } },
+      cutout: '65%'
+    }
+  });
+
+  // Recommendations
+  const recs = document.getElementById('recommendationsList');
+  recs.innerHTML = (d.recommendations || []).map((rec, i) => {
+    const icons = ['💡','⚠️','🌟','📊'];
+    return \`<div class="glass-light p-2 rounded-xl text-xs flex items-start gap-2">
+      <span>\${icons[i % icons.length]}</span>
+      <span>\${rec}</span>
+    </div>\`;
+  }).join('') || '<div class="text-xs text-gray-400">No recommendations yet.</div>';
+
+  // Favorite styles
+  const stylesList = document.getElementById('favoriteStylesList');
+  const favStyles = [];
+  if (d.adaptive_profile?.favorite_styles) {
+    try {
+      const s = JSON.parse(d.adaptive_profile.favorite_styles);
+      Object.entries(s).sort((a,b)=>b[1]-a[1]).slice(0,4).forEach(([k,v]) => favStyles.push({k,v}));
+    } catch {}
+  }
+  stylesList.innerHTML = favStyles.length ? favStyles.map(({k,v}) => {
+    const pct = Math.min(100, v * 20);
+    return \`<div>
+      <div class="flex justify-between text-xs mb-1">
+        <span class="font-bold">\${STYLE_EMOJIS[k]||'🎵'} \${k}</span>
+        <span class="text-gray-400">\${v.toFixed(1)} pts</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:\${pct}%"></div></div>
+    </div>\`;
+  }).join('') : '<div class="text-xs text-gray-400">No style data yet. Play more songs!</div>';
+
+  // Top songs
+  const topList = document.getElementById('topSongsList');
+  topList.innerHTML = (d.top_snippets || []).length ? (d.top_snippets || []).map((s, i) => {
+    const medals = ['🥇','🥈','🥉','🏅'];
+    return \`<div class="glass-light p-2 rounded-xl flex items-center justify-between text-xs">
+      <span>\${medals[i]||'🎵'} \${s.source_song || 'AI Generated'} · \${s.style}</span>
+      <span class="text-yellow-400 font-bold">\${(s.engagement_score*100).toFixed(0)}% ❤️</span>
+    </div>\`;
+  }).join('') : '<div class="text-xs text-gray-400">No songs rated yet.</div>';
+
+  // Adaptive data
+  const adaptEl = document.getElementById('adaptiveData');
+  const ap = d.adaptive_profile;
+  adaptEl.innerHTML = ap ? \`
+    <div class="space-y-2">
+      <div class="flex justify-between glass-light p-2 rounded-xl text-xs">
+        <span>Total Sessions</span><span class="font-black text-pink-400">\${ap.total_sessions}</span>
+      </div>
+      <div class="flex justify-between glass-light p-2 rounded-xl text-xs">
+        <span>Songs Played</span><span class="font-black text-yellow-400">\${ap.total_songs_played}</span>
+      </div>
+      <div class="flex justify-between glass-light p-2 rounded-xl text-xs">
+        <span>Avg Engagement</span><span class="font-black text-green-400">\${(ap.avg_engagement_score*100).toFixed(1)}%</span>
+      </div>
+      <div class="glass-light p-2 rounded-xl text-xs">
+        <div class="flex justify-between mb-1"><span>Engagement Score</span><span class="text-blue-400 font-black">\${(ap.avg_engagement_score*100).toFixed(0)}%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:\${ap.avg_engagement_score*100}%"></div></div>
+      </div>
+    </div>\` : '<div class="text-xs text-gray-400">No adaptive data yet.</div>';
+}
+
+async function saveParentalRules() {
+  const childId = document.getElementById('dashboardChildSelect').value;
+  if (!childId) { showToast('Select a child first!', '⚠️', 'warning'); return; }
+  
+  const st = parseInt(document.getElementById('ruleScreenTime').value) || 30;
+  const vol = parseInt(document.getElementById('ruleVolume').value) || 70;
+  
+  await api('POST', '/dashboard/' + childId + '/rules', {
+    rule_type: 'screen_time', rule_value: { maxMinutes: st, alertAt: st - 5 }
+  });
+  await api('POST', '/dashboard/' + childId + '/rules', {
+    rule_type: 'volume_limit', rule_value: { maxVolume: vol }
+  });
+  
+  showToast('Parental rules saved! 🛡️', '✅', 'success');
+}
+
+// ── Library ───────────────────────────────────────────────────
+function populateLibrarySelect(profiles) {
+  const sel = document.getElementById('libraryChildSelect');
+  if (!profiles) return;
+  sel.innerHTML = '<option value="">Select profile...</option>';
+  profiles.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = \`\${AVATARS[p.avatar]||'🐾'} \${p.name}\`;
+    sel.appendChild(opt);
+  });
+}
+
+async function loadLibrary(childId) {
+  if (!childId) return;
+  const r = await api('GET', '/music/snippets/' + childId);
+  const content = document.getElementById('libraryContent');
+  
+  if (!r.success || !r.data?.snippets?.length) {
+    content.innerHTML = \`<div class="glass p-12 text-center">
+      <i class="fas fa-music text-5xl text-gray-600 mb-4 block"></i>
+      <p class="text-gray-400 font-bold">No songs generated yet for this profile</p>
+      <p class="text-gray-500 text-sm mt-2">Start a session and generate some music!</p>
+    </div>\`;
+    return;
+  }
+
+  const snippets = r.data.snippets;
+  content.innerHTML = \`<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    \${snippets.map(s => \`
+      <div class="glass p-4 slide-up">
+        <div class="flex items-start gap-3 mb-3">
+          <div class="text-3xl">\${STYLE_EMOJIS[s.style]||'🎵'}</div>
+          <div class="flex-1 min-w-0">
+            <div class="font-black truncate">\${s.source_song || 'AI Original'}</div>
+            <div class="text-xs text-gray-400">\${s.style} · \${s.tempo} · \${s.duration_seconds}s</div>
+          </div>
+          <div class="text-xs font-black text-yellow-400">\${(s.engagement_score*100).toFixed(0)}% ❤️</div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="playLibrarySnippet('\${s.audio_url}','\${s.source_song||'AI Song'}','\${s.style}',\${s.duration_seconds})"
+            class="btn-secondary flex-1 text-xs">
+            <i class="fas fa-play mr-1"></i> Play
+          </button>
+          <div class="text-xs text-gray-500 flex items-center px-2">
+            <i class="fas fa-headphones mr-1"></i>\${s.play_count}x
+          </div>
+        </div>
+        <div class="text-xs text-gray-600 mt-2 truncate">\${new Date(s.created_at).toLocaleDateString()}</div>
+      </div>
+    \`).join('')}
+  </div>\`;
+}
+
+function playLibrarySnippet(url, title, style, duration) {
+  playAudio(url, title, style, duration);
+  switchTab('companion');
+  showToast(\`Playing: \${title}\`, '🎵');
+}
+
+// ── Settings / System Info ────────────────────────────────────
+function saveApiKeys() {
+  const suno = document.getElementById('sunoKeyInput').value;
+  const openai = document.getElementById('openaiKeyInput').value;
+  if (suno) localStorage.setItem('mb_suno_key', suno);
+  if (openai) localStorage.setItem('mb_openai_key', openai);
+  showToast('API keys saved locally. Configure secrets server-side for production.', '🔑', 'success');
+}
+
+async function loadSystemInfo() {
+  const r = await api('GET', '/health');
+  const el = document.getElementById('systemInfo');
+  if (r.status === 'ok') {
+    el.innerHTML = Object.entries(r).map(([k,v]) =>
+      typeof v === 'object'
+        ? \`<div class="font-black text-xs text-gray-400 mt-2 mb-1 uppercase">\${k}</div>\${
+            Object.entries(v).map(([k2,v2])=>\`<div class="flex justify-between glass-light p-1 px-2 rounded text-xs mb-1"><span class="text-gray-400">\${k2}</span><span class="font-bold text-green-400">\${v2}</span></div>\`).join('')}\`
+        : \`<div class="flex justify-between glass-light p-1 px-2 rounded text-xs mb-1"><span class="text-gray-400">\${k}</span><span class="font-bold">\${v}</span></div>\`
+    ).join('');
+  }
+}
+
+// ── Initialize ────────────────────────────────────────────────
+async function init() {
+  // Load voices for TTS
+  if ('speechSynthesis' in window) speechSynthesis.getVoices();
+  
+  // Load profiles on start
+  const r = await api('GET', '/profiles');
+  if (r.success && r.data?.length) {
+    populateDashboardSelect(r.data);
+    populateLibrarySelect(r.data);
+    // Auto-select first profile
+    if (r.data.length > 0) {
+      await selectChild(r.data[0].id);
+    }
+  }
+  
+  // Load system info
+  await loadSystemInfo();
+  
+  // nextActionIn countdown
+  setInterval(() => {
+    if (!STATE.sessionActive) return;
+    const elapsed = Date.now() - STATE.lastInteractionTime;
+    const cycleMs = parseInt(document.getElementById('cycleInterval')?.value || 30000);
+    const remaining = Math.max(0, Math.ceil((cycleMs - elapsed) / 1000));
+    document.getElementById('nextActionIn').textContent = remaining + 's';
+  }, 1000);
+}
+
+window.addEventListener('load', init);
+</script>
+</body>
+</html>`;
+}
+
+export default app
