@@ -21,10 +21,19 @@ export type IntentType =
   | 'PLAY_SONG'
   | 'GET_SONG_LIBRARY'
   | 'REPLAY_SONG'
-  // TTS Management
-  | 'USE_TTS'
-  | 'TRACK_TTS_USAGE'
-  | 'GET_TTS_QUOTA'
+  // ── TTS Management (modular tiered system) ────────────────
+  | 'REQUEST_TTS'             // full orchestrated flow (primary)
+  | 'RESOLVE_VOICE_TIER'      // tier check without generation
+  | 'GENERATE_TTS'            // direct generation (bypass cache)
+  | 'CACHE_AUDIO'             // manually cache an audio entry
+  | 'RETRIEVE_CACHED_AUDIO'   // fetch from cache by key
+  | 'TRACK_TTS_USAGE'         // log a usage event
+  | 'HANDLE_TTS_FALLBACK'     // trigger fallback chain
+  | 'GET_TTS_QUOTA'           // current limits / usage
+  | 'GET_TTS_CACHE_STATS'     // cache hit rates / storage
+  | 'SET_VOICE_PREFS'         // save voice preferences
+  | 'GET_VOICE_PREFS'         // load voice preferences
+  | 'USE_TTS'                 // legacy alias → REQUEST_TTS
   // Gaze / Camera
   | 'TRACK_GAZE'
   | 'PROCESS_FACE_EVENT'

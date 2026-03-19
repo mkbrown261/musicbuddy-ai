@@ -20,6 +20,7 @@ import { intelligence } from './routes/intelligence'
 import { billing } from './routes/billing'
 import { intentRoute } from './routes/intent'
 import { auth } from './routes/auth'
+import { tts } from './routes/tts'
 
 // Bootstrap all Intent Layer modules (runs once at edge startup)
 import { bootstrapModules } from './lib/modules/index'
@@ -48,6 +49,7 @@ app.route('/api/intelligence', intelligence)
 app.route('/api/billing', billing)
 app.route('/api/intent', intentRoute)
 app.route('/api/auth', auth)
+app.route('/api/tts', tts)
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (c) => {
@@ -4135,86 +4137,90 @@ function stripEmojisAndSymbols(text) {
 // ── TTS / Chat ────────────────────────────────────────────────
 // speakText: strips emojis, applies expression engine, then speaks
 // Returns a Promise that resolves when speech is DONE
-async function speakText(text) {
+async function speakText(text, emotionHint) {
   const cleanText = stripEmojisAndSymbols(text);
   if (!cleanText) return;
 
   // Apply expression engine + PERFORMER for human, energetic delivery
   const expressiveText = EXPRESSOR.express(cleanText);
 
-  // ── TTS Provider cascade (best → fallback) ──────────────
-  // 1. ElevenLabs (most natural — best for children)
-  const elKey = localStorage.getItem('mb_elevenlabs_key');
-  if (elKey) {
-    const audioUrl = await callElevenLabsTTS(expressiveText);
-    if (audioUrl) {
+  // ── Determine emotion from context ────────────────────────────
+  const emotion = emotionHint
+    || (STATE.energyLevel === 'high' ? 'excited'
+        : STATE.energyLevel === 'low' ? 'calm'
+        : 'friendly');
+
+  // ── INTENT LAYER: REQUEST_TTS ──────────────────────────────────
+  // The orchestrator handles provider selection, cache lookup,
+  // tier resolution, fallback chain, and usage tracking.
+  // Frontend only needs to POST one intent and play the result.
+  try {
+    const r = await api('POST', '/intent', {
+      intent:    'REQUEST_TTS',
+      userId:    AUTH.user?.id ? String(AUTH.user.id) : 'demo',
+      childId:   STATE.selectedChild?.id ?? undefined,
+      sessionId: STATE.currentSession?.id ?? undefined,
+      data: {
+        text:    expressiveText,
+        emotion: emotion,
+        style:   STATE.sessionActive ? 'children_host' : 'neutral',
+      },
+    });
+
+    if (r.success && r.data?.audioUrl) {
+      // ── Server-generated audio (OpenAI / ElevenLabs / Polly) ──
       const bgAudio = document.getElementById('audioPlayer');
-      if (STATE.isPlaying) bgAudio.volume = Math.max(0.1, bgAudio.volume * 0.3);
+      if (STATE.isPlaying && bgAudio) bgAudio.volume = Math.max(0.1, bgAudio.volume * 0.3);
+
+      // Show trial indicator if running low
+      if (r.data.trialRemaining !== undefined && r.data.trialRemaining <= 3) {
+        showToast(
+          r.data.trialRemaining === 0
+            ? 'Premium voice trial ended. Upgrade for ElevenLabs! 🎤'
+            : \`Premium voice: \${r.data.trialRemaining} uses left\`,
+          '🎤',
+          r.data.trialRemaining === 0 ? 'warning' : 'info'
+        );
+      }
+      // Show upgrade prompt if billing trigger set
+      if (r.data.billingTrigger) {
+        setTimeout(() => BILLING.open('starter'), 1500);
+      }
+
       return new Promise((resolve) => {
-        const a = new Audio(audioUrl);
-        a.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
-        a.onended = () => {
-          URL.revokeObjectURL(audioUrl);
-          if (STATE.isPlaying) bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+        const ttsAudio = new Audio(r.data.audioUrl);
+        ttsAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+        ttsAudio.onended = () => {
+          if (STATE.isPlaying && bgAudio) {
+            bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+          }
           resolve();
         };
-        a.onerror = () => { URL.revokeObjectURL(audioUrl); resolve(); };
-        a.play().catch(() => resolve());
+        ttsAudio.onerror = () => resolve();
+        ttsAudio.play().catch(() => resolve());
       });
     }
+    // Fall through to Web Speech API if audioUrl is null (demo mode)
+  } catch (e) {
+    // Intent endpoint unavailable — fall through to browser TTS
   }
 
-  const openaiKey = localStorage.getItem('mb_openai_key');
-
-  // 2. OpenAI TTS (shimmer voice)
-  if (openaiKey && STATE.currentSession && STATE.selectedChild) {
-    try {
-      const r = await api('POST', '/music/tts', {
-        child_id: STATE.selectedChild.id,
-        session_id: STATE.currentSession.id,
-        text: expressiveText,
-        trigger: 'speak'
-      });
-      if (r.success && r.data?.audio_url && !r.data.demo_mode) {
-        const bgAudio = document.getElementById('audioPlayer');
-        if (STATE.isPlaying) bgAudio.volume = Math.max(0.1, bgAudio.volume * 0.3);
-
-        return new Promise((resolve) => {
-          const ttsAudio = new Audio(r.data.audio_url);
-          ttsAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
-          ttsAudio.onended = () => {
-            if (STATE.isPlaying) bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
-            resolve();
-          };
-          ttsAudio.onerror = () => resolve();
-          ttsAudio.play().catch(() => resolve());
-        });
-      }
-    } catch (e) {
-      // Fall through to Web Speech API
-    }
-  }
-  
-  // Fallback: Web Speech API (built into browser, zero cost, works everywhere)
+  // ── Fallback: Web Speech API (built-in, zero cost, always works) ──
   if (!('speechSynthesis' in window)) return;
-
-  // Cancel any current utterance
   window.speechSynthesis.cancel();
 
   return new Promise((resolve) => {
     const utter = new SpeechSynthesisUtterance(expressiveText);
-    // Energy-based rate: high energy = slightly faster
     const baseRate = parseFloat(document.getElementById('ttsSpeed')?.value || 0.9);
     const energyBoost = STATE.energyLevel === 'high' ? 0.07 : STATE.energyLevel === 'low' ? -0.05 : 0;
     utter.rate = Math.max(0.7, Math.min(1.3, baseRate + energyBoost));
     utter.pitch = STATE.energyLevel === 'high' ? 1.35 : STATE.energyLevel === 'low' ? 1.05 : 1.2;
     utter.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
-    
-    // Try to pick the warmest, friendliest voice available
-    // Priority order: Google UK/US female → Samantha → Karen → any English female → any English
+
+    // Best available voice: Google UK Female → Google US → Samantha → any English female
     const voices = window.speechSynthesis.getVoices();
     const pick = (fn) => voices.find(fn);
-    const friendly = 
+    const friendly =
       pick(v => v.name === 'Google UK English Female') ||
       pick(v => v.name === 'Google US English') ||
       pick(v => v.name.includes('Samantha')) ||
@@ -4226,16 +4232,13 @@ async function speakText(text) {
       pick(v => v.lang.startsWith('en'));
     if (friendly) utter.voice = friendly;
 
-    utter.onend = () => resolve();
-    utter.onerror = () => resolve();
-
-    // Chromium bug: speechSynthesis sometimes stalls — watchdog
+    // Watchdog: Chromium sometimes stalls speechSynthesis
     window.speechSynthesis.speak(utter);
     const watchdog = setTimeout(() => {
       window.speechSynthesis.cancel();
       resolve();
-    }, (cleanText.length / 10 * 1000) + 4000); // rough upper bound
-    utter.onend = () => { clearTimeout(watchdog); resolve(); };
+    }, (cleanText.length / 10 * 1000) + 4000);
+    utter.onend  = () => { clearTimeout(watchdog); resolve(); };
     utter.onerror = () => { clearTimeout(watchdog); resolve(); };
   });
 }

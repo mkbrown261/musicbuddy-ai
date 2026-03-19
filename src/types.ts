@@ -4,13 +4,17 @@
 
 export type Bindings = {
   DB: D1Database;
-  OPENAI_API_KEY: string;
-  SUNO_API_KEY: string;
-  GROK_API_KEY: string;
-  REPLICATE_API_KEY: string;
-  ELEVENLABS_API_KEY: string;
-  STRIPE_SECRET_KEY: string;
+  OPENAI_API_KEY:      string;
+  SUNO_API_KEY:        string;
+  GROK_API_KEY:        string;
+  REPLICATE_API_KEY:   string;
+  ELEVENLABS_API_KEY:  string;
+  STRIPE_SECRET_KEY:   string;
   STRIPE_PUBLISHABLE_KEY: string;
+  // Amazon Polly (TTS fallback)
+  AWS_ACCESS_KEY_ID:     string;
+  AWS_SECRET_ACCESS_KEY: string;
+  AWS_REGION:            string;
 };
 
 // ── Database Models ──────────────────────────────────────────

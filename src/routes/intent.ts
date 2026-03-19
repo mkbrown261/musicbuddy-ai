@@ -72,17 +72,36 @@ intentRoute.get('/status', async (c) => {
   return c.json({
     success: true,
     data: {
-      modules: ['SongLibrary', 'TTSManager', 'GazeTracker', 'BehaviorLoop', 'FreeFeatures', 'BillingKeys'],
+      modules: [
+        'SongLibrary', 'TTSManager', 'GazeTracker',
+        'BehaviorLoop', 'FreeFeatures', 'BillingKeys'
+      ],
+      tts_system: {
+        version:     '2.0.0-modular',
+        providers: {
+          openai:      { available: !!(env.OPENAI_API_KEY),      role: 'default' },
+          elevenlabs:  { available: !!(env.ELEVENLABS_API_KEY),  role: 'premium' },
+          polly:       { available: !!(env.AWS_ACCESS_KEY_ID),   role: 'fallback' },
+          demo:        { available: true,                         role: 'browser-speech' },
+        },
+        intents: [
+          'REQUEST_TTS', 'RESOLVE_VOICE_TIER', 'GENERATE_TTS',
+          'CACHE_AUDIO', 'RETRIEVE_CACHED_AUDIO', 'TRACK_TTS_USAGE',
+          'HANDLE_TTS_FALLBACK', 'GET_TTS_QUOTA', 'GET_TTS_CACHE_STATS',
+          'SET_VOICE_PREFS', 'GET_VOICE_PREFS',
+        ],
+      },
       server_capabilities: {
-        openai: !!(env.OPENAI_API_KEY),
-        replicate: !!(env.REPLICATE_API_KEY),
+        openai:     !!(env.OPENAI_API_KEY),
+        replicate:  !!(env.REPLICATE_API_KEY),
         elevenlabs: !!(env.ELEVENLABS_API_KEY),
-        suno: !!(env.SUNO_API_KEY),
-        stripe: !!(env.STRIPE_SECRET_KEY),
+        suno:       !!(env.SUNO_API_KEY),
+        stripe:     !!(env.STRIPE_SECRET_KEY),
+        polly:      !!(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY),
       },
       stripe_publishable_key: env.STRIPE_PUBLISHABLE_KEY ?? null,
-      architecture: 'Intent Layer → Module → Action Layer',
-      version: '2.0.0-modular',
+      architecture: 'Intent Layer → Module → Orchestrator → Provider Adapter → Action Layer',
+      version: '2.0.0-modular-tts',
     }
   });
 });
