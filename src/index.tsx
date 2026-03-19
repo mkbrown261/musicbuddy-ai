@@ -16,6 +16,7 @@ import { sessions } from './routes/sessions'
 import { engagement } from './routes/engagement'
 import { music } from './routes/music'
 import { dashboard } from './routes/dashboard'
+import { intelligence } from './routes/intelligence'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -36,6 +37,7 @@ app.route('/api/sessions', sessions)
 app.route('/api/engagement', engagement)
 app.route('/api/music', music)
 app.route('/api/dashboard', dashboard)
+app.route('/api/intelligence', intelligence)
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (c) => {
@@ -365,6 +367,11 @@ function getMainHTML(): string {
     </div>
   </header>
 
+  <!-- ── Family Quick-Switch Bar (hidden until family created) ── -->
+  <div id="familySwitcher" class="mx-4 mt-3 hidden flex gap-2 flex-wrap items-center">
+    <span class="text-xs text-gray-500 font-bold mr-1">Family:</span>
+  </div>
+
   <!-- ── Tab Navigation ── -->
   <div class="mx-4 mt-4 flex gap-2 overflow-x-auto pb-1">
     <button class="tab-btn active whitespace-nowrap" onclick="switchTab('companion')" id="tab-companion">
@@ -490,6 +497,10 @@ function getMainHTML(): string {
             <div class="text-4xl mb-2 bounce-in" id="nowPlayingEmoji">🎵</div>
             <div class="font-black text-lg" id="nowPlayingTitle">Ready to Play!</div>
             <div class="text-xs text-gray-400 mt-1" id="nowPlayingStyle">Select a child and start a session</div>
+            <!-- Social cue: "Kids your age love this!" -->
+            <div id="socialCueBadge" class="hidden mt-2 text-xs font-black text-yellow-300 bg-yellow-900 bg-opacity-40 rounded-full px-3 py-1 inline-block">
+              <i class="fas fa-fire mr-1"></i><span id="socialCueText"></span>
+            </div>
           </div>
 
           <!-- Waveform -->
@@ -683,6 +694,66 @@ function getMainHTML(): string {
         <i class="fas fa-spinner fa-spin text-3xl text-pink-400 mb-3 block"></i>
         <p class="text-gray-400">Loading profiles...</p>
       </div>
+    </div>
+
+    <!-- Family Group Setup -->
+    <div class="glass p-5 mt-4">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-black text-sm flex items-center gap-2">
+          <i class="fas fa-users text-blue-400"></i> Family Group
+          <span class="text-xs text-gray-400 font-normal">Group mode + quick-switch</span>
+        </h3>
+        <div id="familyGroupStatus" class="text-xs text-gray-500">Not set up</div>
+      </div>
+      <div id="familyGroupSetup" class="space-y-3">
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Family Name</label>
+          <input type="text" id="familyNameInput" placeholder="The Johnson Family" class="text-sm" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Select Children to Group</label>
+          <div id="familyChildCheckboxes" class="flex flex-wrap gap-2"></div>
+        </div>
+        <button onclick="createFamilyGroup()" class="btn-primary text-sm">
+          <i class="fas fa-users mr-1"></i> Create Family Group
+        </button>
+      </div>
+      <div id="familyGroupDisplay" class="hidden">
+        <div id="familyMembersList" class="flex flex-wrap gap-2 mb-3"></div>
+        <button onclick="document.getElementById('familyGroupSetup').classList.remove('hidden');document.getElementById('familyGroupDisplay').classList.add('hidden')" class="btn-secondary text-xs">
+          Edit Group
+        </button>
+      </div>
+    </div>
+
+    <!-- Shared Intelligence Panel -->
+    <div class="glass p-5 mt-4">
+      <h3 class="font-black text-sm flex items-center gap-2 mb-4">
+        <i class="fas fa-brain text-purple-400"></i> Shared Intelligence
+        <span class="text-xs text-gray-400 font-normal">Anonymized cross-child learning</span>
+      </h3>
+      <div id="sharedIntelPanel" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="glass-light p-3 rounded-xl text-center">
+          <div class="text-2xl font-black text-pink-400" id="siTotalSessions">0</div>
+          <div class="text-xs text-gray-400">Sessions Learned</div>
+        </div>
+        <div class="glass-light p-3 rounded-xl text-center">
+          <div class="text-sm font-black text-yellow-400" id="siTopStyle">–</div>
+          <div class="text-xs text-gray-400">Trending Style</div>
+        </div>
+        <div class="glass-light p-3 rounded-xl text-center">
+          <div class="text-sm font-black text-green-400" id="siTopTempo">–</div>
+          <div class="text-xs text-gray-400">Preferred Tempo</div>
+        </div>
+        <div class="glass-light p-3 rounded-xl text-center">
+          <div class="text-sm font-black text-blue-400" id="siAgeGroup">–</div>
+          <div class="text-xs text-gray-400">Age Group</div>
+        </div>
+      </div>
+      <p class="text-xs text-gray-600 mt-3">
+        <i class="fas fa-shield-alt text-green-500 mr-1"></i>
+        No names or personal data are shared. Only anonymized style/tempo patterns.
+      </p>
     </div>
   </div>
 
@@ -1317,6 +1388,9 @@ const STATE = {
   hypeEnabled: true,
   harmonyEnabled: true,
   energyLevel: 'medium',   // low | medium | high
+  // Phase 3 additions
+  _adaptiveProfile: null,  // cached adaptive profile for Intent Layer
+  _predictedNextStyle: null, // predicted next style from Intent Layer
 };
 
 // ══════════════════════════════════════════════════════════
@@ -2028,6 +2102,181 @@ function adaptEnergyFromEngagement() {
 // ── Helper: tiny async delay ──────────────────────────────────
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// ══════════════════════════════════════════════════════════
+// CLIENT-SIDE INTENT LAYER — Phase 3
+// Mirrors src/lib/intent.ts logic in the browser for zero-latency
+// decisions. Shared intelligence loaded from /api/intelligence.
+// Action Layer is NEVER touched here — only Intent objects produced.
+// ══════════════════════════════════════════════════════════
+const INTENT = {
+  sharedCache: {},   // keyed by ageGroup
+  lastFetch: {},     // timestamp per ageGroup
+
+  getAgeGroup(age) {
+    if (age <= 2) return '0-2';
+    if (age <= 5) return '3-5';
+    if (age <= 8) return '6-8';
+    return '9-12';
+  },
+
+  // Fetch shared intelligence (cached 5 minutes)
+  async getShared(ageGroup) {
+    const now = Date.now();
+    if (this.sharedCache[ageGroup] && (now - (this.lastFetch[ageGroup] || 0)) < 300000) {
+      return this.sharedCache[ageGroup];
+    }
+    try {
+      const r = await api('GET', '/intelligence/' + ageGroup);
+      if (r.success && r.data) {
+        this.sharedCache[ageGroup] = r.data;
+        this.lastFetch[ageGroup] = now;
+        return r.data;
+      }
+    } catch {}
+    return null;
+  },
+
+  // Primary style picker: individual first, shared fallback
+  pickStyle(adaptive, profile, shared) {
+    if (adaptive?.favorite_styles) {
+      try {
+        const styles = JSON.parse(adaptive.favorite_styles);
+        const best = Object.entries(styles).sort((a,b) => b[1]-a[1])[0];
+        if (best && best[1] > 1) return best[0];
+      } catch {}
+    }
+    if (shared?.top_styles) {
+      const best = Object.entries(shared.top_styles).sort((a,b) => b[1]-a[1])[0];
+      if (best) return best[0];
+    }
+    return profile?.preferred_style || 'playful';
+  },
+
+  pickTempo(adaptive, shared) {
+    if (adaptive?.favorite_tempos) {
+      try {
+        const tempos = JSON.parse(adaptive.favorite_tempos);
+        const best = Object.entries(tempos).sort((a,b) => b[1]-a[1])[0];
+        if (best && best[1] > 1) return best[0];
+      } catch {}
+    }
+    if (shared?.top_tempos) {
+      const best = Object.entries(shared.top_tempos).sort((a,b) => b[1]-a[1])[0];
+      if (best) return best[0];
+    }
+    return 'medium';
+  },
+
+  buildSocialCue(ageGroup, style, shared) {
+    if (!shared || shared.total_sessions_aggregated < 5) return null;
+    const topStyle = Object.entries(shared.top_styles || {}).sort((a,b)=>b[1]-a[1])[0]?.[0];
+    if (!topStyle || topStyle !== style) return null;
+    const label = ageGroup === '3-5' ? 'ages 3 to 5' : ageGroup === '6-8' ? 'ages 6 to 8' : 'kids your age';
+    return \`Kids \${label} love this style right now!\`;
+  },
+
+  predictNextStyle(adaptive, shared, recentEng) {
+    if (recentEng?.hasLaughter || recentEng?.hasSmile) {
+      return this.pickStyle(adaptive, STATE.selectedChild, shared);
+    }
+    if (recentEng?.hasAttentionLoss) {
+      const styles = ['playful','upbeat','lullaby','energetic','classical'];
+      const current = this.pickStyle(adaptive, STATE.selectedChild, shared);
+      return styles.find(s => s !== current) || 'upbeat';
+    }
+    return null;
+  },
+
+  // Post-interaction: feed anonymized data to shared model
+  async learn(age, style, tempo, engagementScore, strategyKey) {
+    try {
+      await api('POST', '/intelligence/learn', {
+        age, style, tempo,
+        engagement_score: engagementScore / 100, // normalize to 0-1
+        strategy_key: strategyKey,
+      });
+      // Invalidate cache for this age group
+      const ag = this.getAgeGroup(age);
+      delete this.sharedCache[ag];
+    } catch { /* silent */ }
+  },
+};
+
+// ══════════════════════════════════════════════════════════
+// FAMILY MODE — Phase 3
+// ══════════════════════════════════════════════════════════
+const FAMILY = {
+  current: null,     // { family_id, name, members[] }
+  activeChildIds: [], // children in current group session
+
+  async load(childId) {
+    try {
+      const r = await api('GET', '/intelligence/family/' + childId);
+      if (r.success && r.data) {
+        this.current = r.data;
+        this.renderSwitcher();
+        return r.data;
+      }
+    } catch {}
+    return null;
+  },
+
+  async create(name, childIds) {
+    const r = await api('POST', '/intelligence/family', { name, child_ids: childIds });
+    if (r.success) {
+      this.current = r.data;
+      this.renderSwitcher();
+      showToast('Family group created!', '👨‍👩‍👧‍👦', 'success');
+    }
+    return r;
+  },
+
+  renderSwitcher() {
+    const bar = document.getElementById('familySwitcher');
+    if (!bar || !this.current?.members?.length) return;
+    bar.innerHTML = '';
+    bar.classList.remove('hidden');
+    this.current.members.forEach(child => {
+      const btn = document.createElement('button');
+      const isActive = STATE.selectedChild?.id === child.id;
+      btn.className = \`song-pill text-xs \${isActive ? 'active' : ''}\`;
+      btn.textContent = (child.avatar === 'bunny' ? '🐰' : child.avatar === 'lion' ? '🦁' :
+        child.avatar === 'star' ? '⭐' : child.avatar === 'bear' ? '🐻' :
+        child.avatar === 'fox' ? '🦊' : '🐧') + ' ' + child.name;
+      btn.onclick = () => selectChild(child.id);
+      bar.appendChild(btn);
+    });
+    // Group session button
+    const grpBtn = document.createElement('button');
+    grpBtn.className = 'song-pill text-xs';
+    grpBtn.textContent = '👨‍👩‍👧 Group Mode';
+    grpBtn.onclick = () => FAMILY.startGroupSession();
+    bar.appendChild(grpBtn);
+  },
+
+  async startGroupSession() {
+    if (!this.current?.members?.length) {
+      showToast('Create a family group first in Profiles!', '⚠️', 'warning');
+      return;
+    }
+    this.activeChildIds = this.current.members.map(m => m.id);
+    const names = this.current.members.map(m => m.name).join(' and ');
+    addChatBubble(\`Group session starting for \${names}!\`, 'ai');
+    const text = \`Hey everyone! \${names}, let us all sing together!\`;
+    await speakText(text);
+    addChatBubble(text, 'ai');
+    // Trigger a group-friendly song (call-and-response style)
+    STATE.style = 'upbeat';
+    STATE.tempo = 'medium';
+    STATE.mood = 'happy';
+    if (STATE.sessionActive) {
+      triggerInteraction('group_engage');
+    } else {
+      showToast('Start a session first to play group music!', '⚠️', 'warning');
+    }
+  },
+};
+
 // ── Star & Note animation ────────────────────────────────────
 (function initParticles() {
   const stars = document.getElementById('stars');
@@ -2176,6 +2425,9 @@ async function loadProfiles() {
   // Populate dropdowns
   populateDashboardSelect(r.data);
   populateLibrarySelect(r.data);
+
+  // Populate family group checkboxes
+  renderFamilyCheckboxes(r.data);
 }
 
 async function createProfile() {
@@ -2223,12 +2475,24 @@ async function selectChild(id) {
   STATE.selectedChild = r.data.child;
   STATE.selectedChild.songs = r.data.songs;
   STATE.selectedChild.adaptive = r.data.adaptive;
-  
+
+  // Cache adaptive profile for Intent Layer
+  STATE._adaptiveProfile = r.data.adaptive || null;
+
   updateChildUI();
   switchTab('companion');
-  showToast(\`Selected \${r.data.child.name}! 🌟\`, '⭐', 'success');
+  showToast(\`Selected \${r.data.child.name}!\`, '⭐', 'success');
   document.querySelectorAll('.profile-card').forEach(c => c.classList.remove('selected'));
   document.getElementById('profile-' + id)?.classList.add('selected');
+
+  // Load family group for this child (updates switcher bar)
+  FAMILY.load(id);
+
+  // Load + display shared intelligence for child's age group
+  const ageGroup = INTENT.getAgeGroup(r.data.child.age);
+  INTENT.getShared(ageGroup).then(shared => {
+    if (shared) updateSharedIntelPanel(shared, ageGroup);
+  });
 }
 
 function updateChildUI() {
@@ -2368,57 +2632,91 @@ async function triggerInteraction(trigger = 'manual') {
     return;
   }
   if (STATE.isPlaying) { showToast('Already playing...', 'ℹ️'); return; }
-  if (STATE._interactionInProgress) return; // prevent double-fire
+  if (STATE._interactionInProgress) return;
   STATE._interactionInProgress = true;
 
   try {
-    // Conversation texts (no emojis — these will be spoken)
+    const child = STATE.selectedChild;
+    const ageGroup = INTENT.getAgeGroup(child.age);
+
+    // ── INTENT LAYER: fetch shared intelligence + build intent ──
+    const shared = await INTENT.getShared(ageGroup);
+    const adaptive = STATE._adaptiveProfile || null;
+
+    // Build engagement context for intent engine
+    const recentEng = {
+      hasSmile: STATE.smileCount > 0,
+      hasLaughter: STATE.laughCount > 0,
+      hasFixation: false,
+      hasAttentionLoss: STATE.engScore < 20 && STATE.lastInteraction === 'sing',
+      avgIntensity: STATE.engScore / 100,
+      dominantEvent: STATE.smileCount > STATE.laughCount ? 'smile' : (STATE.laughCount > 0 ? 'laughter' : null),
+    };
+
+    // Intent engine picks best style/tempo from individual + shared data
+    const bestStyle = INTENT.pickStyle(adaptive, child, shared);
+    const bestTempo = INTENT.pickTempo(adaptive, shared);
+    const socialCue = INTENT.buildSocialCue(ageGroup, bestStyle, shared);
+    const predictedNext = INTENT.predictNextStyle(adaptive, shared, recentEng);
+
+    // Apply intent-driven style to STATE (only via Intent Layer — Action Layer unchanged)
+    STATE.style = bestStyle;
+    STATE.tempo = bestTempo;
+
+    // Show social cue if available
+    if (socialCue) {
+      document.getElementById('socialCueText').textContent = socialCue;
+      document.getElementById('socialCueBadge').classList.remove('hidden');
+      setTimeout(() => document.getElementById('socialCueBadge').classList.add('hidden'), 8000);
+    } else {
+      document.getElementById('socialCueBadge').classList.add('hidden');
+    }
+
+    // Store predicted next for preload
+    if (predictedNext) STATE._predictedNextStyle = predictedNext;
+
+    // ── Talk phase ──────────────────────────────────────────
     const afterSongTexts = [
-      \`You liked that one, huh \${STATE.selectedChild.name}? Let's try another!\`,
+      \`You liked that one, huh \${child.name}? Let's try another!\`,
       \`Woohoo! That was so fun! Ready for more music?\`,
-      \`Great listening, \${STATE.selectedChild.name}! Did that make you want to dance?\`,
+      \`Great listening, \${child.name}! Did that make you want to dance?\`,
       \`Yay! I love that song too! Want to hear another one?\`,
     ];
     const transitionTexts = [
-      \`Okay \${STATE.selectedChild.name}, get ready... the music is starting!\`,
+      \`Okay \${child.name}, get ready... the music is starting!\`,
       \`Here we go!\`,
-      \`Listen carefully, \${STATE.selectedChild.name}! This one is super special!\`,
+      \`Listen carefully, \${child.name}! This one is super special!\`,
       \`Ready? One, two, three, let's go!\`,
     ];
 
-    // Step 1: Talk first (after a song or at session start)
     if (STATE.lastInteraction === 'sing' || STATE.lastInteraction === null) {
       const talkText = STATE.lastInteraction === 'sing'
         ? afterSongTexts[Math.floor(Math.random() * afterSongTexts.length)]
         : transitionTexts[0];
-
       addChatBubble(talkText, 'ai');
       updateStateUI('talk', trigger);
-      // AWAIT speech completion before doing anything else
       await speakText(talkText);
     }
 
-    // Step 2: Use preloaded song if available, otherwise generate fresh
+    // ── Music generation ────────────────────────────────────
     updateStateUI('generating', trigger);
-
     let snippet;
+
     if (STATE.nextSnippet && trigger !== 'manual') {
-      // Instant — preloaded in background during last song
       snippet = STATE.nextSnippet;
       STATE.nextSnippet = null;
       addChatBubble('Got your next song ready!', 'ai');
     } else {
       addChatBubble('Generating a new song just for you...', 'ai');
       const r = await api('POST', '/music/generate', {
-        child_id: STATE.selectedChild.id,
+        child_id: child.id,
         session_id: STATE.currentSession.id,
         style: STATE.style,
         tempo: STATE.tempo,
         mood: STATE.mood,
-        trigger: trigger,
+        trigger,
         background_song: STATE.bgSong || undefined,
       });
-
       if (!r.success) {
         showToast('Music generation failed: ' + r.error, '❌', 'error');
         return;
@@ -2431,16 +2729,28 @@ async function triggerInteraction(trigger = 'manual') {
     STATE.lastInteractionTime = Date.now();
     STATE.consecutiveSongs++;
 
-    // Step 3: Speak transition cue, then play music AFTER speech ends
+    // ── Transition cue → then music ─────────────────────────
     const transText = transitionTexts[Math.floor(Math.random() * transitionTexts.length)];
     addChatBubble(transText, 'ai');
     updateStateUI('talk', 'transition');
-    // AWAIT — music only starts once the child hears the cue
     await speakText(transText);
 
-    // Step 4: Now play the music
     playAudio(snippet.audio_url, snippet.title, snippet.style, snippet.duration_seconds);
     addCycleEvent('🎵', 'song', snippet.title);
+
+    // ── LEARNING LOOP: feed anonymized data to shared model ──
+    // Happens in background, never blocks the UI
+    if (STATE.lastInteraction === 'sing') {
+      setTimeout(() => {
+        INTENT.learn(
+          child.age,
+          STATE.style,
+          STATE.tempo,
+          STATE.engScore,
+          trigger === 'auto_after_song' ? 'normal_post_song' : trigger
+        );
+      }, 2000);
+    }
 
   } finally {
     STATE._interactionInProgress = false;
@@ -3149,6 +3459,56 @@ async function loadSystemInfo() {
 }
 
 // ── Initialize ────────────────────────────────────────────────
+// ── Family Mode Functions — Phase 3 ──────────────────────────
+async function createFamilyGroup() {
+  const name = document.getElementById('familyNameInput').value.trim() || 'My Family';
+  const checks = document.querySelectorAll('.family-child-check:checked');
+  const childIds = Array.from(checks).map(c => parseInt(c.value));
+  if (childIds.length < 2) {
+    showToast('Select at least 2 children for a family group', '⚠️', 'warning');
+    return;
+  }
+  const r = await FAMILY.create(name, childIds);
+  if (r.success) {
+    document.getElementById('familyGroupStatus').textContent = name + ' (' + childIds.length + ' children)';
+    document.getElementById('familyGroupSetup').classList.add('hidden');
+    document.getElementById('familyGroupDisplay').classList.remove('hidden');
+    const list = document.getElementById('familyMembersList');
+    list.innerHTML = r.data.members.map(m =>
+      \`<span class="song-pill text-xs active">\${m.name}, age \${m.age}</span>\`
+    ).join('');
+  }
+}
+
+function renderFamilyCheckboxes(profiles) {
+  const container = document.getElementById('familyChildCheckboxes');
+  if (!container) return;
+  container.innerHTML = profiles.map(p =>
+    \`<label class="flex items-center gap-2 song-pill text-xs cursor-pointer">
+      <input type="checkbox" class="family-child-check" value="\${p.id}" />
+      \${p.name} (age \${p.age})
+    </label>\`
+  ).join('');
+}
+
+// ── Shared Intelligence Panel — Phase 3 ──────────────────────
+function updateSharedIntelPanel(shared, ageGroup) {
+  const totalEl = document.getElementById('siTotalSessions');
+  const styleEl = document.getElementById('siTopStyle');
+  const tempoEl = document.getElementById('siTopTempo');
+  const ageEl = document.getElementById('siAgeGroup');
+  if (totalEl) totalEl.textContent = shared.total_sessions_aggregated;
+  if (ageEl) ageEl.textContent = ageGroup;
+  if (styleEl && shared.top_styles) {
+    const top = Object.entries(shared.top_styles).sort((a,b) => b[1]-a[1])[0];
+    styleEl.textContent = top ? top[0] : '–';
+  }
+  if (tempoEl && shared.top_tempos) {
+    const top = Object.entries(shared.top_tempos).sort((a,b) => b[1]-a[1])[0];
+    tempoEl.textContent = top ? top[0] : '–';
+  }
+}
+
 // ── Creator Tab Init ─────────────────────────────────────────
 function initCreatorTab() {
   // Update provider display

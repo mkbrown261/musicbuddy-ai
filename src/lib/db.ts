@@ -264,10 +264,115 @@ export class DB {
     return sessions.reduce((sum, s) => sum + (s.total_duration_seconds ?? 0), 0) / 60;
   }
 
+  // ── Parental Rules ────────────────────────────────────────
   async getParentalRules(childId: number): Promise<Array<{ rule_type: string; rule_value: string }>> {
     const r = await this.db.prepare(
       'SELECT rule_type, rule_value FROM parental_rules WHERE child_id = ? AND is_active = 1'
     ).bind(childId).all<{ rule_type: string; rule_value: string }>();
     return r.results;
+  }
+
+  // ── Shared Intelligence (Phase 3) ─────────────────────────
+  async getSharedIntelligence(ageGroup: string): Promise<any | null> {
+    return await this.db.prepare(
+      'SELECT * FROM shared_intelligence WHERE age_group = ?'
+    ).bind(ageGroup).first();
+  }
+
+  async upsertSharedIntelligence(ageGroup: string, data: {
+    top_styles: Record<string, number>;
+    top_tempos: Record<string, number>;
+    effective_strategies: Record<string, number>;
+    engagement_patterns: Record<string, number>;
+    total_sessions_aggregated: number;
+  }): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO shared_intelligence
+         (age_group, top_styles, top_tempos, effective_strategies, engagement_patterns, total_sessions_aggregated)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(age_group) DO UPDATE SET
+         top_styles = excluded.top_styles,
+         top_tempos = excluded.top_tempos,
+         effective_strategies = excluded.effective_strategies,
+         engagement_patterns = excluded.engagement_patterns,
+         total_sessions_aggregated = excluded.total_sessions_aggregated,
+         last_updated = CURRENT_TIMESTAMP`
+    ).bind(
+      ageGroup,
+      JSON.stringify(data.top_styles),
+      JSON.stringify(data.top_tempos),
+      JSON.stringify(data.effective_strategies),
+      JSON.stringify(data.engagement_patterns),
+      data.total_sessions_aggregated
+    ).run();
+  }
+
+  async getAllSharedIntelligence(): Promise<any[]> {
+    const r = await this.db.prepare(
+      'SELECT * FROM shared_intelligence ORDER BY age_group'
+    ).all();
+    return r.results;
+  }
+
+  // ── Trending Songs (Phase 3) ──────────────────────────────
+  async getTrendingSongs(ageGroup: string, limit: number = 5): Promise<any[]> {
+    const r = await this.db.prepare(
+      `SELECT * FROM trending_songs WHERE age_group = ?
+       ORDER BY trend_score DESC, avg_engagement DESC LIMIT ?`
+    ).bind(ageGroup, limit).all();
+    return r.results;
+  }
+
+  async upsertTrendingSong(ageGroup: string, style: string, tempo: string, engagementScore: number): Promise<void> {
+    // trend_score = 0.5 * engagement + 0.3 * log(plays+1) + 0.2 * recency (simplified)
+    await this.db.prepare(
+      `INSERT INTO trending_songs (age_group, style, tempo, play_count, avg_engagement, trend_score, last_played)
+       VALUES (?, ?, ?, 1, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(rowid) DO NOTHING`
+    ).bind(ageGroup, style, tempo, engagementScore, engagementScore).run();
+
+    // Update existing
+    await this.db.prepare(
+      `UPDATE trending_songs SET
+         play_count = play_count + 1,
+         avg_engagement = (avg_engagement * play_count + ?) / (play_count + 1),
+         trend_score = (avg_engagement * 0.6) + (MIN(play_count, 20) * 0.02),
+         last_played = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE age_group = ? AND style = ? AND tempo = ?`
+    ).bind(engagementScore, ageGroup, style, tempo).run();
+  }
+
+  // ── Family Groups (Phase 3) ───────────────────────────────
+  async getFamilyByChild(childId: number): Promise<{ family_id: number; name: string } | null> {
+    return await this.db.prepare(
+      `SELECT fg.id as family_id, fg.name
+       FROM family_groups fg
+       JOIN family_members fm ON fm.family_id = fg.id
+       WHERE fm.child_id = ?`
+    ).bind(childId).first<{ family_id: number; name: string }>();
+  }
+
+  async getFamilyMembers(familyId: number): Promise<any[]> {
+    const r = await this.db.prepare(
+      `SELECT cp.* FROM child_profiles cp
+       JOIN family_members fm ON fm.child_id = cp.id
+       WHERE fm.family_id = ?
+       ORDER BY cp.age ASC`
+    ).bind(familyId).all();
+    return r.results;
+  }
+
+  async createFamily(name: string): Promise<number> {
+    const r = await this.db.prepare(
+      'INSERT INTO family_groups (name) VALUES (?)'
+    ).bind(name).run();
+    return r.meta.last_row_id as number;
+  }
+
+  async addFamilyMember(familyId: number, childId: number): Promise<void> {
+    await this.db.prepare(
+      'INSERT OR REPLACE INTO family_members (family_id, child_id) VALUES (?, ?)'
+    ).bind(familyId, childId).run();
   }
 }
