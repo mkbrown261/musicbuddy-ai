@@ -1780,7 +1780,7 @@ const EXPRESSOR = {
       const pair = templates[i % templates.length];
       lines.push(pair[0], pair[1]);
     }
-    return lines.slice(0, numLines).join('\n');
+    return lines.slice(0, numLines).join('\\n');
   },
 
   // Build timed lyric phrases for beat-synced delivery
@@ -1788,7 +1788,7 @@ const EXPRESSOR = {
     const bpm = parseInt(bpmValue) || 100;
     const beatDuration = 60 / bpm; // seconds per beat
     const phraseDuration = beatDuration * 4; // 4 beats per phrase
-    const lines = lyrics.split('\n').map(l => l.trim()).filter(Boolean);
+    const lines = lyrics.split('\\n').map(l => l.trim()).filter(Boolean);
 
     return lines.map((line, i) => ({
       text: line,
@@ -2176,7 +2176,7 @@ async function saveCreatorSong() {
 function shareCreatorSong() {
   const song = STATE.creatorSong;
   if (!song) return;
-  const text = \`🎵 Check out my MusicBuddy AI song: "\${song.title}"\n\${song.lyrics.split('\n').slice(0,2).join('\n')}\`;
+  const text = \`🎵 Check out my MusicBuddy AI song: "\${song.title}"\\n\${song.lyrics.split('\\n').slice(0,2).join('\\n')}\`;
   if (navigator.share) {
     navigator.share({ title: song.title, text }).catch(() => {});
   } else {
