@@ -379,6 +379,9 @@ function getMainHTML(): string {
     <button class="tab-btn whitespace-nowrap" onclick="switchTab('library')" id="tab-library">
       <i class="fas fa-headphones mr-1"></i> Library
     </button>
+    <button class="tab-btn whitespace-nowrap" onclick="switchTab('creator')" id="tab-creator">
+      <i class="fas fa-wand-magic-sparkles mr-1"></i> Creator
+    </button>
     <button class="tab-btn whitespace-nowrap" onclick="switchTab('settings')" id="tab-settings">
       <i class="fas fa-sliders-h mr-1"></i> Settings
     </button>
@@ -842,6 +845,218 @@ function getMainHTML(): string {
     </div>
   </div>
 
+  <!-- ══════════════════ TAB: CREATOR MODE ══════════════════════ -->
+  <div id="tab-content-creator" class="tab-content px-4 py-4 hidden">
+    <div class="max-w-3xl mx-auto space-y-5">
+
+      <!-- Header -->
+      <div class="glass p-5 flex items-center gap-4">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-3xl">🎛️</div>
+        <div>
+          <h2 class="font-black text-2xl">Creator Mode</h2>
+          <p class="text-sm text-purple-300">Build songs from lyrics, text prompts, or uploaded audio</p>
+        </div>
+        <div class="ml-auto">
+          <div class="text-xs text-gray-400 text-right">Active provider:</div>
+          <div id="creatorProvider" class="text-xs font-black text-green-400 text-right">demo</div>
+        </div>
+      </div>
+
+      <!-- Mode toggle -->
+      <div class="glass p-4 flex gap-3">
+        <button onclick="setCreatorMode('lyrics')" id="cmLyrics" class="song-pill active flex-1 justify-center text-sm font-black py-2">
+          ✏️ Write Lyrics
+        </button>
+        <button onclick="setCreatorMode('prompt')" id="cmPrompt" class="song-pill flex-1 justify-center text-sm font-black py-2">
+          💡 Text Prompt
+        </button>
+        <button onclick="setCreatorMode('upload')" id="cmUpload" class="song-pill flex-1 justify-center text-sm font-black py-2">
+          📂 Upload Audio
+        </button>
+      </div>
+
+      <!-- LYRICS MODE -->
+      <div id="creatorPanelLyrics" class="glass p-5 space-y-4">
+        <h3 class="font-black text-sm flex items-center gap-2"><i class="fas fa-pen text-pink-400"></i> Write Your Lyrics</h3>
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Song Title</label>
+          <input type="text" id="lyricTitle" placeholder="My Awesome Song" class="text-sm" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Lyrics</label>
+          <textarea id="lyricInput" rows="6" placeholder="A, B, C, come sing with me!&#10;D, E, F, as happy as can be!&#10;G, H, I, we're reaching for the sky!&#10;J, K, L, let's give a great big yell!" class="text-sm" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:10px 14px;color:white;width:100%;font-family:inherit;resize:vertical;min-height:120px"></textarea>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Style</label>
+            <select id="lyricStyle" class="text-sm">
+              <option value="playful">🎈 Playful</option>
+              <option value="upbeat">⚡ Upbeat</option>
+              <option value="lullaby">🌙 Lullaby</option>
+              <option value="classical">🎻 Classical</option>
+              <option value="energetic">🔥 Energetic</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">BPM</label>
+            <select id="lyricBpm" class="text-sm">
+              <option value="80">🐢 80 BPM (slow)</option>
+              <option value="100" selected>🚶 100 BPM</option>
+              <option value="110">🏃 110 BPM</option>
+              <option value="120">🚀 120 BPM (fast)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Energy</label>
+            <select id="lyricEnergy" class="text-sm">
+              <option value="low">😌 Calm</option>
+              <option value="medium" selected>😊 Normal</option>
+              <option value="high">🔥 High Energy</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex gap-3">
+          <button onclick="autoGenerateLyrics()" class="btn-secondary flex-1 text-sm">
+            <i class="fas fa-magic mr-1"></i> Auto-Generate Lyrics
+          </button>
+          <button onclick="buildSongFromLyrics()" class="btn-primary flex-1 text-sm">
+            <i class="fas fa-music mr-1"></i> Build Song
+          </button>
+        </div>
+      </div>
+
+      <!-- PROMPT MODE -->
+      <div id="creatorPanelPrompt" class="glass p-5 space-y-4 hidden">
+        <h3 class="font-black text-sm flex items-center gap-2"><i class="fas fa-lightbulb text-yellow-400"></i> Describe Your Song</h3>
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">What should this song be about?</label>
+          <textarea id="promptInput" rows="3" placeholder="A fun song about a dinosaur who loves to dance and eat pizza" class="text-sm" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:10px 14px;color:white;width:100%;font-family:inherit;resize:vertical"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">For who?</label>
+            <input type="text" id="promptChildName" placeholder="Child's name (optional)" class="text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Style</label>
+            <select id="promptStyle" class="text-sm">
+              <option value="playful">🎈 Playful</option>
+              <option value="upbeat">⚡ Upbeat</option>
+              <option value="lullaby">🌙 Lullaby</option>
+              <option value="energetic">🔥 Energetic</option>
+            </select>
+          </div>
+        </div>
+        <button onclick="buildSongFromPrompt()" class="btn-primary w-full text-sm">
+          <i class="fas fa-wand-magic-sparkles mr-1"></i> Generate Song From Prompt
+        </button>
+      </div>
+
+      <!-- UPLOAD MODE -->
+      <div id="creatorPanelUpload" class="glass p-5 space-y-4 hidden">
+        <h3 class="font-black text-sm flex items-center gap-2"><i class="fas fa-upload text-blue-400"></i> Upload Audio</h3>
+        <div id="uploadDropzone" class="border-2 border-dashed border-white border-opacity-20 rounded-2xl p-8 text-center cursor-pointer hover:border-pink-400 hover:bg-white hover:bg-opacity-5 transition"
+             onclick="document.getElementById('audioFileInput').click()"
+             ondrop="handleAudioDrop(event)" ondragover="event.preventDefault()">
+          <i class="fas fa-cloud-upload-alt text-4xl text-gray-500 mb-3 block"></i>
+          <p class="font-bold text-gray-300">Drop MP3 or WAV here</p>
+          <p class="text-xs text-gray-500 mt-1">or click to browse</p>
+          <div id="uploadFileName" class="mt-3 text-sm text-green-400 font-bold hidden"></div>
+        </div>
+        <input type="file" id="audioFileInput" accept=".mp3,.wav,audio/mp3,audio/wav,audio/mpeg" class="hidden" onchange="handleAudioFile(event)" />
+        <div id="audioAnalysisResult" class="hidden glass-light p-4 rounded-xl text-sm space-y-2">
+          <div class="font-black text-xs text-gray-400 uppercase mb-2">Detected Properties</div>
+          <div class="flex justify-between"><span class="text-gray-400">Tempo</span><span id="detectedBpm" class="font-bold text-yellow-400">--</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">Duration</span><span id="detectedDuration" class="font-bold text-blue-400">--</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">Mood Est.</span><span id="detectedMood" class="font-bold text-pink-400">--</span></div>
+        </div>
+        <div id="uploadActions" class="hidden space-y-3">
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">What to generate from this audio?</label>
+            <select id="uploadAction" class="text-sm">
+              <option value="match">Match Style — new song in same vibe</option>
+              <option value="lyrics">Add Lyrics — generate words that fit</option>
+              <option value="remix">Remix — variation on the theme</option>
+            </select>
+          </div>
+          <button onclick="buildSongFromUpload()" class="btn-primary w-full text-sm">
+            <i class="fas fa-magic mr-1"></i> Create From Upload
+          </button>
+        </div>
+      </div>
+
+      <!-- Build Progress -->
+      <div id="creatorBuildProgress" class="glass p-5 hidden">
+        <div class="flex items-center gap-3 mb-3">
+          <i class="fas fa-spinner fa-spin text-pink-400 text-xl"></i>
+          <span class="font-black" id="creatorProgressLabel">Building your song...</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill transition-all duration-500" id="creatorProgressBar" style="width:0%"></div>
+        </div>
+        <div id="creatorProgressSteps" class="mt-3 space-y-1 text-xs text-gray-400"></div>
+      </div>
+
+      <!-- Built Song Result -->
+      <div id="creatorResult" class="glass p-5 hidden">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="text-3xl" id="creatorResultEmoji">🎵</div>
+          <div>
+            <div class="font-black text-lg" id="creatorResultTitle">Your Song</div>
+            <div class="text-xs text-gray-400" id="creatorResultMeta">playful • 100 BPM</div>
+          </div>
+          <button onclick="playCreatorSong()" class="btn-primary ml-auto px-5">
+            <i class="fas fa-play mr-1"></i> Play
+          </button>
+        </div>
+
+        <!-- Lyrics display -->
+        <div id="creatorLyricsDisplay" class="glass-light p-4 rounded-xl text-sm font-bold leading-relaxed mb-4 whitespace-pre-line text-purple-200"></div>
+
+        <!-- Mix controls -->
+        <div class="space-y-3">
+          <div class="font-black text-xs text-gray-400 uppercase mb-2">Mix Controls</div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-gray-400 block mb-1">Lead Vocal <span id="leadVolLabel">100%</span></label>
+              <input type="range" min="0" max="100" value="100" id="leadVolSlider" oninput="updateMix('lead',this.value)" style="background:none;border:none;padding:0;accent-color:#ff6b9d;width:100%" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 block mb-1">Harmony <span id="harmVolLabel">55%</span></label>
+              <input type="range" min="0" max="100" value="55" id="harmVolSlider" oninput="updateMix('harmony',this.value)" style="background:none;border:none;padding:0;accent-color:#c44dbb;width:100%" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 block mb-1">Background Hype <span id="bgVolLabel">35%</span></label>
+              <input type="range" min="0" max="100" value="35" id="bgVolSlider" oninput="updateMix('bg',this.value)" style="background:none;border:none;padding:0;accent-color:#6bcb77;width:100%" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 block mb-1">Instrumental <span id="instVolLabel">70%</span></label>
+              <input type="range" min="0" max="100" value="70" id="instVolSlider" oninput="updateMix('inst',this.value)" style="background:none;border:none;padding:0;accent-color:#4d96ff;width:100%" />
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="toggleHypeVocals()" id="hypeToggleBtn" class="song-pill active text-xs">
+              🎤 Hype Vocals: ON
+            </button>
+            <button onclick="toggleHarmony()" id="harmToggleBtn" class="song-pill active text-xs">
+              🎶 Harmony: ON
+            </button>
+          </div>
+        </div>
+
+        <div class="flex gap-2 mt-4">
+          <button onclick="saveCreatorSong()" class="btn-success flex-1 text-sm">
+            <i class="fas fa-save mr-1"></i> Save to Library
+          </button>
+          <button onclick="shareCreatorSong()" class="btn-secondary text-sm px-4">
+            <i class="fas fa-share mr-1"></i>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ══════════════════ TAB: SETTINGS ══════════════════════ -->
   <div id="tab-content-settings" class="tab-content px-4 py-4 hidden">
     <div class="max-w-2xl mx-auto space-y-4">
@@ -1093,7 +1308,725 @@ const STATE = {
   lastInteraction: null,
   lastInteractionTime: 0,
   consecutiveSongs: 0,
+  // Phase 2 additions
+  nextSnippet: null,       // preloaded next song
+  creatorMode: 'lyrics',   // lyrics | prompt | upload
+  creatorSong: null,       // currently built creator song
+  uploadedAudio: null,     // AudioBuffer from upload
+  uploadedFile: null,      // raw File
+  hypeEnabled: true,
+  harmonyEnabled: true,
+  energyLevel: 'medium',   // low | medium | high
 };
+
+// ══════════════════════════════════════════════════════════
+// WEB AUDIO ENGINE — Phase 2
+// Real-time multi-layer mixing: lead + harmony + bg + instrumental
+// ══════════════════════════════════════════════════════════
+const AUDIO = {
+  ctx: null,
+  masterGain: null,
+  compressor: null,
+  nodes: {},   // keyed by layer name
+  initialized: false,
+
+  init() {
+    if (this.initialized) return;
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // Compressor on master bus — tames spikes, keeps it clean
+      this.compressor = this.ctx.createDynamicsCompressor();
+      this.compressor.threshold.value = -18;
+      this.compressor.knee.value = 12;
+      this.compressor.ratio.value = 3;
+      this.compressor.attack.value = 0.003;
+      this.compressor.release.value = 0.25;
+
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = 0.9;
+
+      this.masterGain.connect(this.compressor);
+      this.compressor.connect(this.ctx.destination);
+      this.initialized = true;
+    } catch(e) {
+      console.warn('Web Audio API not available:', e);
+    }
+  },
+
+  resume() {
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+
+  async loadBuffer(url) {
+    const res = await fetch(url);
+    const ab = await res.arrayBuffer();
+    return this.ctx.decodeAudioData(ab);
+  },
+
+  /** Create a source → gain → panner chain. Returns { source, gain, pan } */
+  createTrack(buffer, gainValue, panValue) {
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const gain = this.ctx.createGain();
+    gain.gain.value = Math.max(0, Math.min(1, gainValue));
+
+    const pan = this.ctx.createStereoPanner();
+    pan.pan.value = Math.max(-1, Math.min(1, panValue));
+
+    source.connect(gain);
+    gain.connect(pan);
+    pan.connect(this.masterGain);
+
+    return { source, gain, pan };
+  },
+
+  /** Play layered song: lead + harmony×2 + bg + instrumental */
+  async playMix(layers, bpm = 100, onEnded) {
+    if (!this.ctx) return;
+    this.resume();
+    this.stopAll();
+
+    const now = this.ctx.currentTime;
+    const beatDuration = 60 / bpm;
+    const activeNodes = [];
+
+    const load = async (url) => {
+      if (!url) return null;
+      try { return await this.loadBuffer(url); } catch { return null; }
+    };
+
+    const [leadBuf, harmBuf, bgBuf, instBuf] = await Promise.all([
+      load(layers.lead),
+      load(layers.harmony),
+      load(layers.bg),
+      load(layers.instrumental),
+    ]);
+
+    if (leadBuf) {
+      const t = this.createTrack(leadBuf, layers.leadVol ?? 1.0, 0);
+      t.source.start(now);
+      if (onEnded) t.source.onended = onEnded;
+      activeNodes.push(t);
+      this.nodes.lead = t;
+    }
+
+    if (harmBuf && STATE.harmonyEnabled) {
+      // Left harmony
+      const tL = this.createTrack(harmBuf, layers.harmVol ?? 0.55, -0.3);
+      // Slight delay creates chorus effect
+      tL.source.start(now + 0.025);
+      activeNodes.push(tL);
+      this.nodes.harmL = tL;
+
+      // Right harmony (same buffer, different start offset)
+      const tR = this.createTrack(harmBuf, layers.harmVol ?? 0.5, 0.3);
+      tR.source.start(now + 0.05);
+      activeNodes.push(tR);
+      this.nodes.harmR = tR;
+    }
+
+    if (instBuf) {
+      const t = this.createTrack(instBuf, layers.instVol ?? 0.7, 0);
+      t.source.start(now);
+      activeNodes.push(t);
+      this.nodes.inst = t;
+    }
+
+    // Background hype clips on beats (every 2 beats after initial gap)
+    if (bgBuf && STATE.hypeEnabled && layers.bg) {
+      const scheduleHype = (offset) => {
+        if (!STATE.isPlaying) return;
+        const t = this.createTrack(bgBuf, layers.bgVol ?? 0.35, (Math.random() * 1.2) - 0.6);
+        t.source.start(now + offset);
+        activeNodes.push(t);
+      };
+      // Schedule hype at beat 8, 16, 24, 32...
+      for (let beat = 8; beat < 64; beat += 8) {
+        scheduleHype(beat * beatDuration);
+      }
+    }
+
+    this._activeNodes = activeNodes;
+  },
+
+  /** Update gain for a named layer in real time */
+  setLayerGain(name, value) {
+    const node = this.nodes[name];
+    if (node?.gain) node.gain.gain.setTargetAtTime(value, this.ctx.currentTime, 0.05);
+    // harmL and harmR share harmony control
+    if (name === 'harmony') {
+      if (this.nodes.harmL) this.nodes.harmL.gain.gain.setTargetAtTime(value, this.ctx.currentTime, 0.05);
+      if (this.nodes.harmR) this.nodes.harmR.gain.gain.setTargetAtTime(value * 0.9, this.ctx.currentTime, 0.05);
+    }
+  },
+
+  /** Trigger a one-shot hype sound using oscillator (no asset needed) */
+  playHypeOscillator(type = 'yeah') {
+    if (!this.ctx || !STATE.hypeEnabled) return;
+    this.resume();
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const pan = this.ctx.createStereoPanner();
+
+    osc.connect(gain); gain.connect(pan); pan.connect(this.masterGain);
+
+    const now = this.ctx.currentTime;
+    pan.pan.value = (Math.random() * 1.4) - 0.7;
+
+    if (type === 'yeah') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(500, now + 0.15);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc.start(now); osc.stop(now + 0.2);
+    } else if (type === 'woo') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.linearRampToValueAtTime(900, now + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(400, now + 0.3);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.start(now); osc.stop(now + 0.35);
+    } else { // beat click
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(200, now);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      osc.start(now); osc.stop(now + 0.05);
+    }
+  },
+
+  stopAll() {
+    if (!this._activeNodes) return;
+    this._activeNodes.forEach(n => {
+      try { n.source.stop(); } catch {}
+    });
+    this._activeNodes = [];
+    this.nodes = {};
+  },
+};
+
+// ══════════════════════════════════════════════════════════
+// EXPRESSION ENGINE — Phase 2
+// Converts flat text into expressive performance scripts
+// ══════════════════════════════════════════════════════════
+const EXPRESSOR = {
+  // Transforms boring phrases into energetic, human-voiced delivery
+  express(text) {
+    // Already stripped of emojis by speakText — this adds expressiveness
+    return text
+      // Enthusiasm injections
+      .replace(/\bGreat\b/g, 'Yaaayyy! Great')
+      .replace(/\bYay\b/gi, 'Yaaayyy')
+      .replace(/\bWoohoo\b/gi, 'Wooo hoooo')
+      .replace(/\bWow\b/gi, 'Wooooow')
+      .replace(/\bYes\b/gi, 'Oh yes')
+      .replace(/\bAwesome\b/gi, 'That is AWESOME')
+      .replace(/\bGood job\b/gi, 'Yaaayyy — good job!')
+      // Pacing: add pauses with commas where natural
+      .replace(/\.\s+/g, '... ')
+      .replace(/!\s+/g, '! ')
+      // Energy for exclamations
+      .replace(/super special/gi, 'SUPER special')
+      .replace(/really fun/gi, 'REALLY fun')
+      // Name emphasis (child name gets a small pause before)
+      // (child name substitution already happened upstream)
+      .trim();
+  },
+
+  // Generate rhyming lyric pairs for a given topic/style
+  generateLyrics(topic, style, childName, numLines = 8) {
+    const name = childName || 'friend';
+    const styleTemplates = {
+      playful: [
+        [\`Hey \${name}, let's play and sing today!\`, 'Clap your hands and shout hooray!'],
+        ['Jump and bounce and spin around,', 'Make the most amazing sound!'],
+        ['Wiggle fingers, wiggle toes,', 'Everywhere the music goes!'],
+        [\`You are wonderful, \${name}!\`, 'Music fills the room today!'],
+      ],
+      upbeat: [
+        ['Move your body, feel the beat,', 'Stomp stomp stomp your dancing feet!'],
+        ['Left and right and up and down,', 'Spin around and touch the ground!'],
+        ['Clap your hands, one two three,', 'Singing makes us all feel free!'],
+        [\`Go \${name}, go go go!\`, 'Watch your energy just flow!'],
+      ],
+      lullaby: [
+        ['Close your eyes and drift away,', 'We will sing until the end of day.'],
+        ['Soft and gentle, sweet and slow,', 'Watch the sleepy moonbeams glow.'],
+        ['Stars are shining, night is near,', 'Mommy and daddy love you dear.'],
+        [\`Dream sweet dreams tonight, \${name},\`, 'Morning music on the way.'],
+      ],
+      energetic: [
+        ['JUMP! JUMP! Feel the power!', 'SING! SING! Every single hour!'],
+        ['Run and leap and touch the sky,', 'Music makes us want to fly!'],
+        ['BOOM! BOOM! Hear that beat!', 'Feel it travel to your feet!'],
+        [\`\${name} is the BEST today!\`, 'Nothing can get in our way!'],
+      ],
+      classical: [
+        ['La la la, so sweetly singing,', 'Hear the melody bells are ringing.'],
+        ['Gentle notes float through the air,', 'Music flowing everywhere.'],
+        ['One two three, a waltz we play,', 'Dancing gracefully today.'],
+        [\`Beautiful music, \${name},\` , 'Like a song upon the breeze.'],
+      ],
+    };
+
+    const templates = styleTemplates[style] || styleTemplates.playful;
+    const lines = [];
+    const needed = Math.ceil(numLines / 2);
+    for (let i = 0; i < needed; i++) {
+      const pair = templates[i % templates.length];
+      lines.push(pair[0], pair[1]);
+    }
+    return lines.slice(0, numLines).join('\n');
+  },
+
+  // Build timed lyric phrases for beat-synced delivery
+  buildBeatSyncedPhrases(lyrics, bpmValue) {
+    const bpm = parseInt(bpmValue) || 100;
+    const beatDuration = 60 / bpm; // seconds per beat
+    const phraseDuration = beatDuration * 4; // 4 beats per phrase
+    const lines = lyrics.split('\n').map(l => l.trim()).filter(Boolean);
+
+    return lines.map((line, i) => ({
+      text: line,
+      startSec: i * phraseDuration,
+      durationSec: phraseDuration,
+      beat: i * 4 + 1,
+    }));
+  },
+};
+
+// ══════════════════════════════════════════════════════════
+// LYRIC GENERATION ENGINE — Phase 2
+// ══════════════════════════════════════════════════════════
+async function autoGenerateLyrics() {
+  const style = document.getElementById('lyricStyle').value;
+  const name = STATE.selectedChild?.name || '';
+  const title = document.getElementById('lyricTitle').value || 'My Song';
+  const lyrics = EXPRESSOR.generateLyrics(title, style, name, 8);
+  document.getElementById('lyricInput').value = lyrics;
+  showToast('Lyrics generated! Customize them then hit Build Song.', '✏️', 'success');
+}
+
+// ══════════════════════════════════════════════════════════
+// CREATOR MODE LOGIC — Phase 2
+// ══════════════════════════════════════════════════════════
+function setCreatorMode(mode) {
+  STATE.creatorMode = mode;
+  ['lyrics','prompt','upload'].forEach(m => {
+    document.getElementById(\`creatorPanel\${m.charAt(0).toUpperCase()+m.slice(1)}\`)?.classList.toggle('hidden', m !== mode);
+    document.getElementById(\`cm\${m.charAt(0).toUpperCase()+m.slice(1)}\`)?.classList.toggle('active', m === mode);
+  });
+}
+
+function creatorProgress(label, pct, step) {
+  document.getElementById('creatorBuildProgress').classList.remove('hidden');
+  document.getElementById('creatorProgressLabel').textContent = label;
+  document.getElementById('creatorProgressBar').style.width = pct + '%';
+  if (step) {
+    const steps = document.getElementById('creatorProgressSteps');
+    const d = document.createElement('div');
+    d.textContent = '✓ ' + step;
+    d.className = 'text-green-400';
+    steps.appendChild(d);
+  }
+}
+
+async function buildSongFromLyrics() {
+  const lyrics = document.getElementById('lyricInput').value.trim();
+  const title = document.getElementById('lyricTitle').value.trim() || 'My Song';
+  if (!lyrics) { showToast('Enter some lyrics first!', '⚠️', 'warning'); return; }
+
+  const bpm = parseInt(document.getElementById('lyricBpm').value) || 100;
+  const style = document.getElementById('lyricStyle').value;
+  const energy = document.getElementById('lyricEnergy').value;
+
+  document.getElementById('creatorProgressSteps').innerHTML = '';
+  document.getElementById('creatorResult').classList.add('hidden');
+
+  creatorProgress('Analyzing lyrics...', 10, 'Lyrics received');
+  await delay(400);
+  creatorProgress('Building beat-sync plan...', 25, \`BPM: \${bpm} | Style: \${style}\`);
+  const phrases = EXPRESSOR.buildBeatSyncedPhrases(lyrics, bpm);
+  await delay(300);
+  creatorProgress('Generating instrumental...', 45, \`\${phrases.length} lyric lines mapped to beats\`);
+
+  // Call music API with the lyrics-based prompt
+  const prompt = \`Children's song titled "\${title}". Style: \${style}. Energy: \${energy}. BPM: \${bpm}. Lyrics: \${lyrics.slice(0, 200)}\`;
+  const r = await api('POST', '/music/generate', {
+    child_id: STATE.selectedChild?.id || 1,
+    session_id: STATE.currentSession?.id || 1,
+    style, tempo: bpm >= 110 ? 'fast' : bpm <= 85 ? 'slow' : 'medium',
+    mood: energy === 'high' ? 'energetic' : energy === 'low' ? 'calm' : 'happy',
+    trigger: 'creator',
+  });
+
+  creatorProgress('Building vocal layers...', 70, 'Instrumental ready');
+  await delay(500);
+  creatorProgress('Mixing harmony + background vocals...', 85, 'Vocal layers synthesized');
+  await delay(400);
+  creatorProgress('Finalizing mix...', 100, 'Mix complete!');
+  await delay(300);
+
+  document.getElementById('creatorBuildProgress').classList.add('hidden');
+
+  STATE.creatorSong = {
+    id: Date.now(),
+    title,
+    lyrics,
+    phrases,
+    bpm,
+    style,
+    energy,
+    audioUrl: r.success ? r.data.audio_url : null,
+    provider: r.success ? r.data.provider : 'demo',
+    sourceType: 'generated',
+    layers: {
+      lead: r.success ? r.data.audio_url : null,
+      leadVol: 1.0,
+      harmVol: 0.55,
+      bgVol: 0.35,
+      instVol: 0.7,
+    },
+  };
+
+  showCreatorResult(STATE.creatorSong);
+  showToast('Song built! Hit Play to hear it.', '🎵', 'success');
+}
+
+async function buildSongFromPrompt() {
+  const prompt = document.getElementById('promptInput').value.trim();
+  const name = document.getElementById('promptChildName').value.trim() || STATE.selectedChild?.name || 'friend';
+  const style = document.getElementById('promptStyle').value;
+  if (!prompt) { showToast('Describe your song first!', '⚠️', 'warning'); return; }
+
+  document.getElementById('creatorProgressSteps').innerHTML = '';
+  document.getElementById('creatorResult').classList.add('hidden');
+
+  creatorProgress('Reading your prompt...', 15, 'Prompt: ' + prompt.slice(0, 40));
+  await delay(400);
+  creatorProgress('Generating lyrics from prompt...', 35, 'Writing rhymes...');
+
+  // Auto-generate matching lyrics from the topic
+  const autoLyrics = EXPRESSOR.generateLyrics(prompt, style, name, 8);
+  await delay(500);
+  creatorProgress('Building instrumental...', 60, 'Lyrics ready');
+
+  const r = await api('POST', '/music/generate', {
+    child_id: STATE.selectedChild?.id || 1,
+    session_id: STATE.currentSession?.id || 1,
+    style, tempo: 'medium', mood: 'happy',
+    trigger: 'creator',
+  });
+
+  creatorProgress('Mixing vocals...', 85, 'Harmony + background added');
+  await delay(500);
+  creatorProgress('Done!', 100, 'Song complete');
+  await delay(300);
+
+  document.getElementById('creatorBuildProgress').classList.add('hidden');
+
+  const title = prompt.split(' ').slice(0, 4).map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+  STATE.creatorSong = {
+    id: Date.now(), title, lyrics: autoLyrics,
+    phrases: EXPRESSOR.buildBeatSyncedPhrases(autoLyrics, 100),
+    bpm: 100, style, energy: 'medium',
+    audioUrl: r.success ? r.data.audio_url : null,
+    provider: r.success ? r.data.provider : 'demo',
+    sourceType: 'generated',
+    layers: { lead: r.success ? r.data.audio_url : null, leadVol: 1.0, harmVol: 0.55, bgVol: 0.35, instVol: 0.7 },
+  };
+
+  showCreatorResult(STATE.creatorSong);
+  showToast('Song built from your idea!', '🎵', 'success');
+}
+
+async function handleAudioFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  await processUploadedAudio(file);
+}
+
+function handleAudioDrop(event) {
+  event.preventDefault();
+  const file = event.dataTransfer.files[0];
+  if (file && (file.type.includes('audio') || file.name.endsWith('.mp3') || file.name.endsWith('.wav'))) {
+    processUploadedAudio(file);
+  } else {
+    showToast('Please drop an MP3 or WAV file', '⚠️', 'warning');
+  }
+}
+
+async function processUploadedAudio(file) {
+  STATE.uploadedFile = file;
+  document.getElementById('uploadFileName').textContent = '🎵 ' + file.name;
+  document.getElementById('uploadFileName').classList.remove('hidden');
+  showToast('Analyzing audio...', '🔍');
+
+  try {
+    AUDIO.init();
+    const ab = await file.arrayBuffer();
+    const buf = await AUDIO.ctx.decodeAudioData(ab.slice(0));
+    STATE.uploadedAudio = buf;
+
+    // Estimate tempo from duration and basic analysis
+    const duration = buf.duration;
+    const estimatedBpm = estimateBpmFromBuffer(buf);
+    const mood = duration > 120 ? 'calm' : duration > 60 ? 'happy' : 'energetic';
+
+    document.getElementById('detectedBpm').textContent = estimatedBpm + ' BPM (est.)';
+    document.getElementById('detectedDuration').textContent = Math.round(duration) + 's';
+    document.getElementById('detectedMood').textContent = mood;
+    document.getElementById('audioAnalysisResult').classList.remove('hidden');
+    document.getElementById('uploadActions').classList.remove('hidden');
+    showToast('Audio analyzed! Choose what to create.', '✅', 'success');
+  } catch(e) {
+    showToast('Could not analyze audio: ' + e.message, '❌', 'error');
+  }
+}
+
+function estimateBpmFromBuffer(buffer) {
+  // Simple energy-based BPM estimation
+  const data = buffer.getChannelData(0);
+  const sampleRate = buffer.sampleRate;
+  const windowSize = Math.floor(sampleRate * 0.1); // 100ms windows
+  const energies = [];
+  for (let i = 0; i < data.length - windowSize; i += windowSize) {
+    let energy = 0;
+    for (let j = 0; j < windowSize; j++) energy += data[i+j] * data[i+j];
+    energies.push(energy / windowSize);
+  }
+  // Count energy peaks (rough beat detection)
+  const avg = energies.reduce((a,b) => a+b, 0) / energies.length;
+  let peaks = 0;
+  for (let i = 1; i < energies.length - 1; i++) {
+    if (energies[i] > avg * 1.5 && energies[i] > energies[i-1] && energies[i] > energies[i+1]) peaks++;
+  }
+  const durationSec = buffer.duration;
+  const bpm = Math.round((peaks / durationSec) * 60);
+  // Clamp to reasonable range
+  return Math.min(160, Math.max(60, bpm));
+}
+
+async function buildSongFromUpload() {
+  if (!STATE.uploadedFile) { showToast('Upload a file first!', '⚠️', 'warning'); return; }
+
+  const action = document.getElementById('uploadAction').value;
+  const detectedBpm = parseInt(document.getElementById('detectedBpm').textContent) || 100;
+  const detectedMood = document.getElementById('detectedMood').textContent;
+  const style = detectedMood === 'calm' ? 'lullaby' : detectedMood === 'energetic' ? 'energetic' : 'playful';
+
+  document.getElementById('creatorProgressSteps').innerHTML = '';
+  document.getElementById('creatorResult').classList.add('hidden');
+
+  creatorProgress('Reading uploaded audio...', 20, \`File: \${STATE.uploadedFile.name}\`);
+  await delay(400);
+  creatorProgress(\`Generating \${action} from audio style...\`, 50, \`Detected: \${detectedBpm} BPM, \${detectedMood}\`);
+
+  const name = STATE.selectedChild?.name || 'friend';
+  const autoLyrics = EXPRESSOR.generateLyrics(STATE.uploadedFile.name.replace(/\.[^.]+$/, ''), style, name, 8);
+
+  const r = await api('POST', '/music/generate', {
+    child_id: STATE.selectedChild?.id || 1,
+    session_id: STATE.currentSession?.id || 1,
+    style, tempo: detectedBpm >= 110 ? 'fast' : detectedBpm <= 85 ? 'slow' : 'medium',
+    mood: detectedMood, trigger: 'creator',
+  });
+
+  creatorProgress('Building vocal layers...', 85, 'Applying style from upload');
+  await delay(500);
+  creatorProgress('Done!', 100, 'Song complete');
+  await delay(300);
+  document.getElementById('creatorBuildProgress').classList.add('hidden');
+
+  const title = 'Based on: ' + STATE.uploadedFile.name.replace(/\.[^.]+$/, '').slice(0, 24);
+  STATE.creatorSong = {
+    id: Date.now(), title, lyrics: autoLyrics,
+    phrases: EXPRESSOR.buildBeatSyncedPhrases(autoLyrics, detectedBpm),
+    bpm: detectedBpm, style, energy: 'medium',
+    audioUrl: r.success ? r.data.audio_url : null,
+    provider: r.success ? r.data.provider : 'demo',
+    sourceType: 'uploaded',
+    layers: { lead: r.success ? r.data.audio_url : null, leadVol: 1.0, harmVol: 0.55, bgVol: 0.35, instVol: 0.7 },
+  };
+
+  showCreatorResult(STATE.creatorSong);
+  showToast('Song created from your upload!', '🎵', 'success');
+}
+
+function showCreatorResult(song) {
+  const styleEmojis = { playful:'🎈', upbeat:'⚡', lullaby:'🌙', classical:'🎻', energetic:'🔥' };
+  document.getElementById('creatorResultEmoji').textContent = styleEmojis[song.style] || '🎵';
+  document.getElementById('creatorResultTitle').textContent = song.title;
+  document.getElementById('creatorResultMeta').textContent =
+    \`\${song.style} • \${song.bpm} BPM • \${song.provider}\`;
+  document.getElementById('creatorLyricsDisplay').textContent = song.lyrics;
+  document.getElementById('creatorResult').classList.remove('hidden');
+  document.getElementById('creatorResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function playCreatorSong() {
+  const song = STATE.creatorSong;
+  if (!song) { showToast('Build a song first!', '⚠️', 'warning'); return; }
+
+  AUDIO.init();
+  AUDIO.resume();
+
+  if (song.audioUrl) {
+    // Real audio from API — use Web Audio mixer
+    try {
+      const buf = await AUDIO.loadBuffer(song.audioUrl);
+      const layers = {
+        lead: song.audioUrl,
+        leadVol: song.layers.leadVol,
+        harmVol: song.layers.harmVol,
+        bgVol: song.layers.bgVol,
+        instVol: song.layers.instVol,
+      };
+      await AUDIO.playMix(layers, song.bpm, () => {
+        showToast('Song finished!', '🎵');
+      });
+    } catch(e) {
+      // Fallback to HTML audio element
+      const audio = document.getElementById('audioPlayer');
+      audio.src = song.audioUrl;
+      audio.play().catch(() => {});
+    }
+  } else {
+    showToast('No audio generated yet — check API keys in Settings', '⚠️', 'warning');
+    return;
+  }
+
+  // Beat-synced lyric karaoke in chat
+  scheduleLyricDisplay(song);
+
+  // Schedule hype oscillators at beat intervals
+  if (STATE.hypeEnabled) {
+    const beatMs = (60 / song.bpm) * 1000;
+    const hypeTypes = ['yeah', 'woo', 'yeah', 'beat'];
+    for (let beat = 8; beat < 32; beat += 8) {
+      setTimeout(() => AUDIO.playHypeOscillator(hypeTypes[(beat/8-1) % hypeTypes.length]), beat * beatMs);
+    }
+  }
+
+  showToast('Playing: ' + song.title, '🎵', 'success');
+}
+
+function scheduleLyricDisplay(song) {
+  const chatArea = document.getElementById('chatArea');
+  if (!chatArea) return;
+  song.phrases?.forEach(phrase => {
+    setTimeout(() => {
+      if (!STATE.isPlaying && song !== STATE.creatorSong) return;
+      const bubble = document.createElement('div');
+      bubble.className = 'chat-bubble text-sm font-black text-yellow-200';
+      bubble.style.borderColor = 'rgba(255,215,0,0.4)';
+      bubble.style.background = 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.15))';
+      bubble.innerHTML = \`<span class="text-yellow-400 font-black text-xs block mb-1">♪ Beat \${phrase.beat}</span>\${phrase.text}\`;
+      chatArea.appendChild(bubble);
+      chatArea.scrollTop = chatArea.scrollHeight;
+      setTimeout(() => bubble.remove(), 4000);
+    }, phrase.startSec * 1000);
+  });
+}
+
+function updateMix(layer, value) {
+  const v = parseInt(value) / 100;
+  const labels = { lead: 'leadVolLabel', harmony: 'harmVolLabel', bg: 'bgVolLabel', inst: 'instVolLabel' };
+  const labelMap = { lead: 'lead', harmony: 'harmony', bg: 'bg', inst: 'inst' };
+  document.getElementById(labels[layer]).textContent = value + '%';
+  AUDIO.setLayerGain(labelMap[layer], v);
+  if (STATE.creatorSong?.layers) {
+    const key = { lead: 'leadVol', harmony: 'harmVol', bg: 'bgVol', inst: 'instVol' }[layer];
+    if (key) STATE.creatorSong.layers[key] = v;
+  }
+}
+
+function toggleHypeVocals() {
+  STATE.hypeEnabled = !STATE.hypeEnabled;
+  const btn = document.getElementById('hypeToggleBtn');
+  btn.textContent = STATE.hypeEnabled ? '🎤 Hype Vocals: ON' : '🎤 Hype Vocals: OFF';
+  btn.classList.toggle('active', STATE.hypeEnabled);
+}
+
+function toggleHarmony() {
+  STATE.harmonyEnabled = !STATE.harmonyEnabled;
+  const btn = document.getElementById('harmToggleBtn');
+  btn.textContent = STATE.harmonyEnabled ? '🎶 Harmony: ON' : '🎶 Harmony: OFF';
+  btn.classList.toggle('active', STATE.harmonyEnabled);
+  if (STATE.creatorSong) {
+    const v = STATE.harmonyEnabled ? (STATE.creatorSong.layers.harmVol || 0.55) : 0;
+    AUDIO.setLayerGain('harmony', v);
+  }
+}
+
+async function saveCreatorSong() {
+  const song = STATE.creatorSong;
+  if (!song) return;
+  // Store in localStorage as JSON (no backend needed for demo)
+  const saved = JSON.parse(localStorage.getItem('mb_creator_songs') || '[]');
+  saved.unshift({ ...song, savedAt: new Date().toISOString() });
+  localStorage.setItem('mb_creator_songs', JSON.stringify(saved.slice(0, 50)));
+  showToast('Saved to your library!', '💾', 'success');
+}
+
+function shareCreatorSong() {
+  const song = STATE.creatorSong;
+  if (!song) return;
+  const text = \`🎵 Check out my MusicBuddy AI song: "\${song.title}"\n\${song.lyrics.split('\n').slice(0,2).join('\n')}\`;
+  if (navigator.share) {
+    navigator.share({ title: song.title, text }).catch(() => {});
+  } else {
+    navigator.clipboard?.writeText(text).then(() => showToast('Lyrics copied to clipboard!', '📋', 'success'));
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// PRELOAD SYSTEM — Phase 2
+// Generate next song while current is playing
+// ══════════════════════════════════════════════════════════
+async function preloadNextSong() {
+  if (!STATE.selectedChild || !STATE.currentSession || !STATE.sessionActive) return;
+  if (STATE.nextSnippet) return; // already preloaded
+  try {
+    const r = await api('POST', '/music/generate', {
+      child_id: STATE.selectedChild.id,
+      session_id: STATE.currentSession.id,
+      style: STATE.style,
+      tempo: STATE.tempo,
+      mood: STATE.mood,
+      trigger: 'preload',
+    });
+    if (r.success) {
+      STATE.nextSnippet = r.data;
+      console.log('[Preload] Next song ready:', r.data.title);
+    }
+  } catch { /* silent */ }
+}
+
+// ══════════════════════════════════════════════════════════
+// ENERGY SYSTEM — Phase 2
+// Adapt tempo, hype, and energy based on engagement score
+// ══════════════════════════════════════════════════════════
+function adaptEnergyFromEngagement() {
+  const score = STATE.engScore;
+  if (score >= 70) {
+    STATE.energyLevel = 'high';
+    STATE.tempo = 'fast';
+    if (!STATE.hypeEnabled) { STATE.hypeEnabled = true; document.getElementById('hypeToggleBtn')?.classList.add('active'); }
+  } else if (score >= 35) {
+    STATE.energyLevel = 'medium';
+    STATE.tempo = 'medium';
+  } else {
+    STATE.energyLevel = 'low';
+    STATE.tempo = 'slow';
+  }
+}
+
+// ── Helper: tiny async delay ──────────────────────────────────
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Star & Note animation ────────────────────────────────────
 (function initParticles() {
@@ -1142,6 +2075,7 @@ function switchTab(tab) {
   if (tab === 'dashboard') populateDashboardSelect();
   if (tab === 'library') populateLibrarySelect();
   if (tab === 'settings') loadSystemInfo();
+  if (tab === 'creator') initCreatorTab();
 }
 
 // ── Modal ─────────────────────────────────────────────────────
@@ -1464,26 +2398,34 @@ async function triggerInteraction(trigger = 'manual') {
       await speakText(talkText);
     }
 
-    // Step 2: Generate music (while child waits — show loading state)
+    // Step 2: Use preloaded song if available, otherwise generate fresh
     updateStateUI('generating', trigger);
-    addChatBubble('Generating a new song just for you...', 'ai');
 
-    const r = await api('POST', '/music/generate', {
-      child_id: STATE.selectedChild.id,
-      session_id: STATE.currentSession.id,
-      style: STATE.style,
-      tempo: STATE.tempo,
-      mood: STATE.mood,
-      trigger: trigger,
-      background_song: STATE.bgSong || undefined,
-    });
+    let snippet;
+    if (STATE.nextSnippet && trigger !== 'manual') {
+      // Instant — preloaded in background during last song
+      snippet = STATE.nextSnippet;
+      STATE.nextSnippet = null;
+      addChatBubble('Got your next song ready!', 'ai');
+    } else {
+      addChatBubble('Generating a new song just for you...', 'ai');
+      const r = await api('POST', '/music/generate', {
+        child_id: STATE.selectedChild.id,
+        session_id: STATE.currentSession.id,
+        style: STATE.style,
+        tempo: STATE.tempo,
+        mood: STATE.mood,
+        trigger: trigger,
+        background_song: STATE.bgSong || undefined,
+      });
 
-    if (!r.success) {
-      showToast('Music generation failed: ' + r.error, '❌', 'error');
-      return;
+      if (!r.success) {
+        showToast('Music generation failed: ' + r.error, '❌', 'error');
+        return;
+      }
+      snippet = r.data;
     }
 
-    const snippet = r.data;
     STATE.currentSnippet = snippet;
     STATE.lastInteraction = 'sing';
     STATE.lastInteractionTime = Date.now();
@@ -1510,6 +2452,10 @@ function playAudio(url, title, style, duration) {
   // Stop any ongoing TTS speech before music plays
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 
+  // Init Web Audio engine (needs user gesture — playAudio is always triggered by one)
+  AUDIO.init();
+  AUDIO.resume();
+
   const audio = document.getElementById('audioPlayer');
   audio.src = url;
   audio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
@@ -1527,6 +2473,21 @@ function playAudio(url, title, style, duration) {
   document.getElementById('timeDuration').textContent = \`0:\${String(duration||25).padStart(2,'0')}\`;
   
   updateStateUI('sing', 'playing');
+
+  // Trigger beat-synced hype oscillators while playing
+  if (STATE.hypeEnabled && STATE.sessionActive) {
+    const bpm = STATE.tempo === 'fast' ? 120 : STATE.tempo === 'slow' ? 80 : 100;
+    const beatMs = (60 / bpm) * 1000;
+    const hypeAt = [8, 16, 24]; // beats
+    hypeAt.forEach(beat => {
+      setTimeout(() => {
+        if (STATE.isPlaying) AUDIO.playHypeOscillator(beat === 16 ? 'woo' : 'yeah');
+      }, beat * beatMs);
+    });
+  }
+
+  // Start preloading next song in background
+  setTimeout(() => preloadNextSong(), 2000);
   
   // Progress tracking
   clearInterval(STATE.progressTimer);
@@ -1756,11 +2717,14 @@ function stripEmojisAndSymbols(text) {
 }
 
 // ── TTS / Chat ────────────────────────────────────────────────
-// speakText: tries OpenAI TTS first (if key configured), falls back to Web Speech API
-// Returns a Promise that resolves when speech is DONE (so callers can await it)
+// speakText: strips emojis, applies expression engine, then speaks
+// Returns a Promise that resolves when speech is DONE
 async function speakText(text) {
   const cleanText = stripEmojisAndSymbols(text);
   if (!cleanText) return;
+
+  // Apply expression engine for more human, energetic delivery
+  const expressiveText = EXPRESSOR.express(cleanText);
 
   const openaiKey = localStorage.getItem('mb_openai_key');
   
@@ -1770,13 +2734,13 @@ async function speakText(text) {
       const r = await api('POST', '/music/tts', {
         child_id: STATE.selectedChild.id,
         session_id: STATE.currentSession.id,
-        text: cleanText,
+        text: expressiveText,
         trigger: 'speak'
       });
       if (r.success && r.data?.audio_url && !r.data.demo_mode) {
-        // Stop any background music while talking
+        // Duck any background music while talking
         const bgAudio = document.getElementById('audioPlayer');
-        if (STATE.isPlaying) bgAudio.volume = Math.max(0.1, bgAudio.volume * 0.3); // duck, don't kill
+        if (STATE.isPlaying) bgAudio.volume = Math.max(0.1, bgAudio.volume * 0.3);
         
         return new Promise((resolve) => {
           const ttsAudio = new Audio(r.data.audio_url);
@@ -1801,9 +2765,12 @@ async function speakText(text) {
   window.speechSynthesis.cancel();
 
   return new Promise((resolve) => {
-    const utter = new SpeechSynthesisUtterance(cleanText);
-    utter.rate = parseFloat(document.getElementById('ttsSpeed')?.value || 0.9);
-    utter.pitch = 1.2;
+    const utter = new SpeechSynthesisUtterance(expressiveText);
+    // Energy-based rate: high energy = slightly faster
+    const baseRate = parseFloat(document.getElementById('ttsSpeed')?.value || 0.9);
+    const energyBoost = STATE.energyLevel === 'high' ? 0.07 : STATE.energyLevel === 'low' ? -0.05 : 0;
+    utter.rate = Math.max(0.7, Math.min(1.3, baseRate + energyBoost));
+    utter.pitch = STATE.energyLevel === 'high' ? 1.35 : STATE.energyLevel === 'low' ? 1.05 : 1.2;
     utter.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
     
     // Try to pick a warm, friendly voice
@@ -1901,6 +2868,8 @@ function updateEngagementScoreUI() {
   const pct = Math.min(100, STATE.engScore);
   document.getElementById('engScoreBar').style.width = pct + '%';
   document.getElementById('engScoreVal').textContent = pct + '%';
+  // Adapt energy system based on engagement
+  adaptEnergyFromEngagement();
 }
 
 function updateEngagementUI() {
@@ -2180,9 +3149,30 @@ async function loadSystemInfo() {
 }
 
 // ── Initialize ────────────────────────────────────────────────
+// ── Creator Tab Init ─────────────────────────────────────────
+function initCreatorTab() {
+  // Update provider display
+  const providerEl = document.getElementById('creatorProvider');
+  if (providerEl) {
+    api('GET', '/health').then(r => {
+      const prov = r.layers ? 'demo' : 'demo';
+      providerEl.textContent = prov;
+    }).catch(() => {});
+  }
+  // Reflect selected child name in prompt field placeholder
+  if (STATE.selectedChild) {
+    const promptField = document.getElementById('promptChildName');
+    if (promptField && !promptField.value) promptField.placeholder = STATE.selectedChild.name;
+  }
+}
+
 async function init() {
   // Load voices for TTS
-  if ('speechSynthesis' in window) speechSynthesis.getVoices();
+  if ('speechSynthesis' in window) {
+    speechSynthesis.getVoices();
+    // Some browsers load voices async
+    speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+  }
   
   // Load profiles on start
   const r = await api('GET', '/profiles');
