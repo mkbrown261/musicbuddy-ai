@@ -3135,6 +3135,7 @@ const MINIGAME = {
   },
 
   startRepeatGame() {
+    if (!this.active) return; // guard against stale callbacks after close
     document.getElementById('miniGameTitle').textContent = '🎤 Repeat After Me!';
     const phrases = ['A B C!', 'Clap clap clap!', 'Do re mi!', 'La la la!', 'Boom boom pow!', 'One two three!', 'Hip hip hooray!'];
     const phrase = phrases[Math.floor(Math.random() * phrases.length)];
@@ -3145,11 +3146,10 @@ const MINIGAME = {
         <div class="text-2xl font-black text-yellow-300" id="mgPhrase">Listen...</div>
         <div class="text-xs text-gray-400" id="mgInstructions">I will say a phrase. Then you say it back!</div>
         <div id="mgMicStatus" class="text-green-400 text-sm font-black min-h-5"></div>
-        \${hasVoice ? \`
         <button id="mgVoiceBtn" onclick="MINIGAME.startVoiceRepeat()" class="minigame-btn w-full py-4 hidden">
           <div class="text-3xl mb-1">🎤</div>
           <div class="text-sm">Tap to say it!</div>
-        </button>\` : ''}
+        </button>
         <div class="grid grid-cols-2 gap-3 mt-4" id="mgManualBtns">
           <button onclick="MINIGAME.playerSay('correct')" class="minigame-btn">
             <div class="text-3xl mb-1">✅</div>
@@ -3163,40 +3163,54 @@ const MINIGAME = {
       </div>\`;
 
     this._currentPhrase = phrase;
+    // Cancel any previous TTS before speaking the phrase
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     setTimeout(async () => {
+      if (!MINIGAME.active) return; // closed before timeout fired
       document.getElementById('mgPhrase').textContent = phrase;
       await speakText(phrase, 'excited');
+      if (!MINIGAME.active) return;
       document.getElementById('mgPhrase').textContent = 'Now YOU say: ' + phrase;
-      document.getElementById('mgInstructions').textContent = hasVoice
+      const instrEl = document.getElementById('mgInstructions');
+      if (instrEl) instrEl.textContent = hasVoice
         ? 'Tap the mic button OR the ✅ when done!'
         : 'Say it aloud, then tap ✅ when done!';
-      if (hasVoice) {
-        const vBtn = document.getElementById('mgVoiceBtn');
-        if (vBtn) vBtn.classList.remove('hidden');
-      }
+      // Always show the mic button — voice support check was already done
+      const vBtn = document.getElementById('mgVoiceBtn');
+      if (vBtn) vBtn.classList.remove('hidden');
+      // Auto-start listening on devices that support it
+      if (hasVoice) setTimeout(() => { if (MINIGAME.active) MINIGAME.startVoiceRepeat(); }, 300);
     }, 500);
   },
 
   startVoiceRepeat() {
     const phrase = MINIGAME._currentPhrase;
-    if (!phrase) return;
+    if (!phrase || !MINIGAME.active) return;
+    const micStatus = document.getElementById('mgMicStatus');
+    const vBtn = document.getElementById('mgVoiceBtn');
+    if (micStatus) micStatus.textContent = '🎤 Listening... say: ' + phrase;
+    if (vBtn) { vBtn.disabled = true; vBtn.innerHTML = '<div class="text-3xl mb-1">🔴</div><div class="text-sm">Listening...</div>'; }
     VOICE_INPUT.listenFor(
-      phrase, 6000,
-      (heard) => {
-        // Match!
-        document.getElementById('mgMicStatus').textContent = '✅ ' + heard;
+      phrase, 7000,
+      function(heard) {
+        if (!MINIGAME.active) return;
+        const el = document.getElementById('mgMicStatus');
+        if (el) el.textContent = '✅ Great! I heard: ' + heard;
         MINIGAME.playerSay('correct');
       },
-      (heard) => {
-        // Near miss — still give credit after 2 tries
-        const micStatus = document.getElementById('mgMicStatus');
-        if (micStatus) micStatus.textContent = heard === 'timeout' ? '⏱️ Time up! Try again' : '🔄 Try again: ' + phrase;
-        REWARDS.playMicroSound(); // encourage anyway
+      function(heard) {
+        if (!MINIGAME.active) return;
+        const el = document.getElementById('mgMicStatus');
+        if (el) el.textContent = heard === 'timeout' ? '⏱️ Time up! Tap ✅ if you said it!' : '🔄 Try again: ' + phrase;
+        const btn = document.getElementById('mgVoiceBtn');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<div class="text-3xl mb-1">🎤</div><div class="text-sm">Try again!</div>'; }
+        REWARDS.playMicroSound();
       }
     );
   },
 
   startClapGame() {
+    if (!this.active) return;
     document.getElementById('miniGameTitle').textContent = '👏 Clap the Beat!';
     const target = 3 + Math.floor(Math.random() * 3);
     this.sequence = [target];
@@ -3206,22 +3220,28 @@ const MINIGAME = {
         <div class="text-lg font-black" id="mgClapInstruct">Clap <span class="text-yellow-400 text-2xl">\${target}</span> times!</div>
         <button id="mgClapBtn" onclick="MINIGAME.registerClap()" class="minigame-btn w-full text-5xl py-6">👏</button>
         <div class="text-sm text-gray-400">Claps: <span id="mgClapCount" class="font-black text-pink-400">0</span> / \${target}</div>
-        \${hasVoice ? \`<div class="text-xs text-gray-500 mt-1">💡 Or say "done" / "finished" when you clap \${target} times!</div>\` : ''}
+        \${hasVoice ? \`<div class="text-xs text-gray-500 mt-1">💡 Or say "done" when you finish!</div>\` : ''}
         <div id="mgMicStatus" class="text-green-400 text-sm font-black min-h-5"></div>
       </div>\`;
+    // Cancel any previous speech before speaking the instruction
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     speakText('Clap ' + target + ' times!', 'excited');
-    // Also listen for voice confirmation
+    // Start voice listener after a delay so it doesn't catch our own speech
     if (hasVoice) {
-      setTimeout(() => {
-        VOICE_INPUT.listenFor('done finished clap ' + target, 8000,
-          () => MINIGAME.playerSay('correct'),
-          () => {} // silent fail — user uses button
+      setTimeout(function() {
+        if (!MINIGAME.active) return;
+        const el = document.getElementById('mgMicStatus');
+        if (el) el.textContent = '🎤 Listening for "done"...';
+        VOICE_INPUT.listenFor('done finished', 8000,
+          function() { if (MINIGAME.active) MINIGAME.playerSay('correct'); },
+          function() {} // silent fail — user uses button
         );
-      }, 2000);
+      }, 2500);
     }
   },
 
   startRhythmGame() {
+    if (!this.active) return;
     document.getElementById('miniGameTitle').textContent = '🥁 Match the Rhythm!';
     const patterns = [
       { label: 'SLOW SLOW FAST', beats: [600, 600, 200] },
@@ -3246,14 +3266,16 @@ const MINIGAME = {
         <div id="mgMicStatus" class="text-green-400 text-sm font-black min-h-5"></div>
         <div class="text-xs text-gray-400" id="mgRhythmStatus">Press play to hear it first</div>
       </div>\`;
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   },
 
   voiceRhythm() {
+    if (!MINIGAME.active) return;
     const micStatus = document.getElementById('mgMicStatus');
     if (micStatus) micStatus.textContent = '🎤 Say "done" when you finish tapping!';
     VOICE_INPUT.listenFor('done finished', 8000,
-      () => MINIGAME.playerSay('correct'),
-      () => {} // silent fail
+      function() { if (MINIGAME.active) MINIGAME.playerSay('correct'); },
+      function() {}
     );
   },
 
@@ -3298,101 +3320,141 @@ const MINIGAME = {
   },
 
   playerSay(result) {
+    if (!this.active) return; // guard: ignore if already closed
+    // Cancel any overlapping TTS first
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    // Stop any active voice listener
+    if (VOICE_INPUT && VOICE_INPUT._recognition) {
+      try { VOICE_INPUT._recognition.abort(); } catch(e) {}
+      VOICE_INPUT._listening = false;
+    }
     const name = STATE.selectedChild?.name || 'friend';
     if (result === 'correct') {
       this.score += 10;
       document.getElementById('mgScore').textContent = this.score;
       REWARDS.fire('medium', { trigger: 'minigame_correct' });
-      speakText(\`Yes! \${name}! Perfect!\`);
+      speakText('Yes! ' + name + '! Perfect!', 'excited');
       this.round++;
       if (this.round > this.maxRounds) {
-        setTimeout(() => this.end(true), 800);
+        setTimeout(function() { MINIGAME.end(true); }, 800);
       } else {
         document.getElementById('mgRound').textContent = this.round;
-        setTimeout(() => this.startRepeatGame(), 1200);
+        setTimeout(function() { MINIGAME.startRepeatGame(); }, 1200);
       }
     } else {
-      speakText(\`Try again \${name}! You can do it!\`);
+      speakText('Try again ' + name + '! You can do it!', 'encouraging');
     }
   },
 
   end(win) {
-    this.active = false;
+    if (!this.active) return;
     const name = STATE.selectedChild?.name || 'friend';
-    this.close();
+    this.close(); // cancels TTS + voice listener + hides modal
     if (win) {
       REWARDS.fire('major', { trigger: 'minigame_win' });
-      speakText(\`YAAAYYY! \${name} won the game! You are AMAZING!\`);
+      setTimeout(function() {
+        speakText('YAAAYYY! ' + name + ' won the game! You are AMAZING!', 'excited');
+      }, 200); // small delay so modal close animation completes first
       STATE.engScore = Math.min(100, STATE.engScore + 20);
       updateEngagementScoreUI();
     }
   },
 
   close() {
+    // 1. Hide the modal
     const modal = document.getElementById('miniGameModal');
-    modal.style.display = 'none';
-    modal.classList.add('hidden');
+    if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
+    // 2. Stop all state
     this.active = false;
+    this.type = null;
     clearInterval(this.beatTimer);
+    // 3. Cancel any in-flight TTS (stop overlapping voices)
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    // 4. Stop voice recognition listener
+    if (VOICE_INPUT && VOICE_INPUT._recognition) {
+      try { VOICE_INPUT._recognition.abort(); } catch(e) {}
+      VOICE_INPUT._listening = false;
+      VOICE_INPUT._recognition = null;
+    }
+    // 5. Clear game content so stale buttons can't fire
+    const content = document.getElementById('miniGameContent');
+    if (content) content.innerHTML = '';
   },
 };
 
+// Global close function — called by ×, Close buttons, and carNextRound
+function closeMiniGame() {
+  MINIGAME.close();
+}
+
 function startMiniGame(type) {
-  // Mini-games are FREE — no session required, just start playing!
-  if (!STATE.selectedChild) {
-    // Even without a profile, allow the game with a generic name
-    if (!STATE.selectedChild) STATE.selectedChild = { name: 'friend', age: 5 };
+  // Cancel any currently playing TTS and voice listener before starting game
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  if (VOICE_INPUT && VOICE_INPUT._recognition) {
+    try { VOICE_INPUT._recognition.abort(); } catch(e) {}
+    VOICE_INPUT._listening = false;
   }
-  // Init audio context if needed (requires user gesture, and this IS a gesture)
+  // Mini-games are FREE — no session required, just start playing!
+  if (!STATE.selectedChild) STATE.selectedChild = { name: 'friend', age: 5 };
+  // Init audio context if needed (requires user gesture)
   AUDIO.init(); AUDIO.resume();
   MINIGAME.start(type);
 }
 
 // ── Call & Response interaction ──────────────────────────────────────────────
-// "MusicBuddy sings a phrase, child echoes back" — totally free, no session needed
 async function startCallAndResponse() {
   AUDIO.init(); AUDIO.resume();
+  // Cancel any currently playing TTS before starting
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
   const name = STATE.selectedChild?.name || 'friend';
   const phrases = [
-    { call: \`Hey \${name}! Echo me — La la LA!\`, response: 'La la LA!' },
-    { call: 'If you are happy and you know it, CLAP CLAP!', response: 'CLAP CLAP!' },
-    { call: \`\${name}! Can you say — DO RE MI?\`, response: 'DO RE MI!' },
-    { call: 'Everybody say — YEAH YEAH YEAH!', response: 'YEAH YEAH YEAH!' },
-    { call: 'Boom chicka BOOM chicka BOOM!', response: 'BOOM chicka BOOM!' },
-    { call: \`\${name}, repeat after me — One two THREE!\`, response: 'One two THREE!' },
-    { call: 'Hip hip — HOORAY!', response: 'HOORAY!' },
+    { call: 'Hey ' + name + '! Echo me — La la LA!',              response: 'La la LA!' },
+    { call: 'If you are happy and you know it, CLAP CLAP!',        response: 'CLAP CLAP!' },
+    { call: name + '! Can you say — DO RE MI?',                    response: 'DO RE MI!' },
+    { call: 'Everybody say — YEAH YEAH YEAH!',                     response: 'YEAH YEAH YEAH!' },
+    { call: 'Boom chicka BOOM chicka BOOM!',                       response: 'BOOM chicka BOOM!' },
+    { call: name + ', repeat after me — One two THREE!',           response: 'One two THREE!' },
+    { call: 'Hip hip — HOORAY!',                                   response: 'HOORAY!' },
     { call: 'When I say MusicBuddy, you say ROCKS! MusicBuddy...', response: 'ROCKS!' },
   ];
   const chosen = phrases[Math.floor(Math.random() * phrases.length)];
+  const hasVoice = VOICE_INPUT.isSupported();
 
-  // Show a fun full-screen modal for call and response
-  const modal = document.getElementById('miniGameModal');
-  const titleEl = document.getElementById('miniGameTitle');
-  const contentEl = document.getElementById('miniGameContent');
-  if (!modal || !contentEl) {
-    // Fallback — just speak
+  const modal    = document.getElementById('miniGameModal');
+  const titleEl  = document.getElementById('miniGameTitle');
+  const contentEl= document.getElementById('miniGameContent');
+  if (!modal || !contentEl) { // bare fallback — should never happen
     addChatBubble('🎵 ' + chosen.call, 'ai');
-    await speakText(chosen.call);
-    setTimeout(() => {
-      addChatBubble('Now YOU say: ' + chosen.response + ' 🎤', 'ai');
-      speakText('Now your turn! Say: ' + chosen.response);
-    }, 800);
+    await speakText(chosen.call, 'singing');
+    addChatBubble('Now YOU say: ' + chosen.response + ' 🎤', 'ai');
+    await speakText('Now your turn! Say: ' + chosen.response, 'encouraging');
     return;
   }
 
+  // Mark MINIGAME as active so close() guard works
+  MINIGAME.active = true;
+  MINIGAME.type = 'car';
+
   titleEl.textContent = '🎤 Call & Response!';
   contentEl.innerHTML = \`
-    <div class="text-center py-4">
-      <div class="text-5xl mb-4 animate-bounce">🎵</div>
-      <div id="carPhase" class="text-xl font-black text-white mb-4">MusicBuddy says...</div>
-      <div id="carText" class="text-2xl font-black text-yellow-300 mb-6 px-4">\${chosen.call}</div>
-      <div id="carYourTurn" class="hidden mt-4">
-        <div class="text-lg font-black text-pink-300 mb-2">🎤 Your turn! Say it back!</div>
-        <div class="text-3xl font-black text-green-300">\${chosen.response}</div>
+    <div class="text-center py-2">
+      <div class="text-5xl mb-3 animate-bounce">🎵</div>
+      <div id="carPhase" class="text-lg font-black text-white mb-3">MusicBuddy says...</div>
+      <div id="carText" class="text-2xl font-black text-yellow-300 mb-4 px-2">\${chosen.call}</div>
+      <div id="carYourTurn" class="hidden mt-3">
+        <div class="text-base font-black text-pink-300 mb-2">🎤 Your turn! Say it back!</div>
+        <div class="text-2xl font-black text-green-300 mb-3">\${chosen.response}</div>
+        <div id="carMicStatus" class="text-sm text-green-400 font-bold min-h-5 mb-2"></div>
+        \${hasVoice ? \`
+        <button id="carMicBtn" onclick="carListenForResponse('\${chosen.response}')" class="minigame-btn w-full mb-3">
+          <div class="text-2xl mb-1">🎤</div><div class="text-sm">Tap to speak!</div>
+        </button>\` : ''}
+        <button onclick="carGotIt()" class="btn-success w-full text-sm mb-2">✅ I said it!</button>
       </div>
-      <div id="carButtons" class="mt-6 flex gap-3 justify-center">
-        <button onclick="closeMiniGame()" class="btn-secondary text-sm">Close</button>
-        <button onclick="carNextRound()" class="btn-primary text-sm">
+      <div id="carButtons" class="mt-4 flex gap-3 justify-center">
+        <button onclick="closeMiniGame()" class="btn-secondary text-sm">✖ Close</button>
+        <button id="carNextBtn" onclick="carNextRound()" class="btn-primary text-sm hidden">
           <i class="fas fa-redo mr-1"></i>Another!
         </button>
       </div>
@@ -3400,21 +3462,70 @@ async function startCallAndResponse() {
   modal.style.display = 'flex';
   modal.classList.remove('hidden');
 
-  // Speak the call phrase
+  // Step 1 — speak the call phrase ONCE
   addChatBubble('🎵 ' + chosen.call, 'ai');
-  await speakText(chosen.call);
+  await speakText(chosen.call, 'singing');
+  if (!MINIGAME.active) return; // user closed during speech
 
-  // Show "your turn" prompt
+  // Step 2 — show "your turn" and listen
   const yourTurn = document.getElementById('carYourTurn');
-  const phase = document.getElementById('carPhase');
-  if (yourTurn && phase) {
-    phase.textContent = 'Now YOU say...';
-    yourTurn.classList.remove('hidden');
-  }
-  speakText('Now YOUR turn! Say: ' + chosen.response);
+  const phase    = document.getElementById('carPhase');
+  if (phase)    phase.textContent = 'Now YOU say...';
+  if (yourTurn) yourTurn.classList.remove('hidden');
 
-  // Award XP
+  // Speak the prompt ONCE (no second full speakText for the response text)
+  await speakText('Now your turn! Say: ' + chosen.response, 'encouraging');
+  if (!MINIGAME.active) return;
+
+  // Auto-start voice listener if supported
+  if (hasVoice) {
+    setTimeout(function() {
+      if (MINIGAME.active) carListenForResponse(chosen.response);
+    }, 400);
+  }
+
   if (REWARDS) REWARDS.fire('micro', { trigger: 'call_response' });
+}
+
+// Called when child taps mic in Call & Response
+function carListenForResponse(expected) {
+  if (!MINIGAME.active) return;
+  const micStatus = document.getElementById('carMicStatus');
+  const micBtn    = document.getElementById('carMicBtn');
+  if (micStatus) micStatus.textContent = '🎤 Listening...';
+  if (micBtn)    { micBtn.disabled = true; micBtn.innerHTML = '<div class="text-2xl mb-1">🔴</div><div class="text-sm">Listening...</div>'; }
+  VOICE_INPUT.listenFor(
+    expected, 7000,
+    function(heard) {
+      if (!MINIGAME.active) return;
+      if (micStatus) micStatus.textContent = '✅ I heard: ' + heard + ' — AMAZING!';
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      speakText('Amazing! You got it!', 'excited');
+      REWARDS.fire('medium', { trigger: 'car_correct' });
+      const nextBtn = document.getElementById('carNextBtn');
+      if (nextBtn) nextBtn.classList.remove('hidden');
+      if (micBtn)  micBtn.classList.add('hidden');
+    },
+    function(heard) {
+      if (!MINIGAME.active) return;
+      if (micStatus) micStatus.textContent = heard === 'timeout' ? '⏱️ Tap ✅ if you said it!' : '🔄 Try again! Say: ' + expected;
+      if (micBtn)    { micBtn.disabled = false; micBtn.innerHTML = '<div class="text-2xl mb-1">🎤</div><div class="text-sm">Try again!</div>'; }
+    }
+  );
+}
+
+// Child tapped "I said it!" manually
+function carGotIt() {
+  if (!MINIGAME.active) return;
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  if (VOICE_INPUT && VOICE_INPUT._recognition) {
+    try { VOICE_INPUT._recognition.abort(); } catch(e) {}
+    VOICE_INPUT._listening = false;
+  }
+  speakText('Amazing! You got it!', 'excited');
+  REWARDS.fire('medium', { trigger: 'car_correct' });
+  const nextBtn = document.getElementById('carNextBtn');
+  if (nextBtn) nextBtn.classList.remove('hidden');
 }
 
 window.carNextRound = function() { closeMiniGame(); setTimeout(() => startCallAndResponse(), 200); };
