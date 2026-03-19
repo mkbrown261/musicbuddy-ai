@@ -19,6 +19,7 @@ import { dashboard } from './routes/dashboard'
 import { intelligence } from './routes/intelligence'
 import { billing } from './routes/billing'
 import { intentRoute } from './routes/intent'
+import { auth } from './routes/auth'
 
 // Bootstrap all Intent Layer modules (runs once at edge startup)
 import { bootstrapModules } from './lib/modules/index'
@@ -46,6 +47,7 @@ app.route('/api/dashboard', dashboard)
 app.route('/api/intelligence', intelligence)
 app.route('/api/billing', billing)
 app.route('/api/intent', intentRoute)
+app.route('/api/auth', auth)
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (c) => {
@@ -414,8 +416,112 @@ function getMainHTML(): string {
     .minigame-btn.correct { background: rgba(107,203,119,0.4); border-color: #6bcb77; }
     .minigame-btn.wrong { background: rgba(255,80,80,0.3); border-color: #ff5050; }
   </style>
+
+  <style>
+    /* ── Auth screen ── */
+    #authScreen {
+      position: fixed; inset: 0; z-index: 2000;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #1a0533 0%, #0d1b4b 50%, #0a2a1a 100%);
+    }
+    .auth-card { max-width: 420px; width: 90%; }
+    .auth-tab-active { background: linear-gradient(135deg,#ff6b9d,#c44dbb); border-radius:10px; }
+  </style>
 </head>
 <body class="bg-animated min-h-screen">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- AUTH SCREEN — shown until user signs in or picks Demo -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="authScreen">
+  <div class="auth-card bounce-in">
+    <div class="text-center mb-8">
+      <div class="text-6xl mb-3">🎵</div>
+      <h1 class="text-3xl font-black text-white">MusicBuddy AI</h1>
+      <p class="text-purple-300 text-sm mt-1">Children's Interactive Music Companion</p>
+    </div>
+    <div class="glass p-6">
+      <!-- Tab switcher -->
+      <div class="flex mb-6 glass-light p-1 rounded-xl">
+        <button id="authTabLogin" onclick="switchAuthTab('login')"
+          class="flex-1 py-2 text-sm font-bold rounded-xl auth-tab-active transition-all">
+          <i class="fas fa-sign-in-alt mr-1"></i> Sign In
+        </button>
+        <button id="authTabRegister" onclick="switchAuthTab('register')"
+          class="flex-1 py-2 text-sm font-bold rounded-xl transition-all text-gray-400">
+          <i class="fas fa-user-plus mr-1"></i> Create Account
+        </button>
+      </div>
+      <!-- Login form -->
+      <div id="loginForm">
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Email Address</label>
+            <input type="email" id="loginEmail" placeholder="parent@example.com"
+              onkeydown="if(event.key==='Enter') doLogin()" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Password</label>
+            <div class="relative">
+              <input type="password" id="loginPassword" placeholder="Your password"
+                onkeydown="if(event.key==='Enter') doLogin()" />
+              <button onclick="togglePwd('loginPassword')"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                <i class="fas fa-eye text-sm"></i>
+              </button>
+            </div>
+          </div>
+          <div id="loginError" class="hidden text-red-400 text-xs px-1"></div>
+          <button onclick="doLogin()" id="loginBtn" class="btn-primary w-full mt-2">
+            <i class="fas fa-sign-in-alt mr-2"></i> Sign In
+          </button>
+        </div>
+        <p class="text-center text-xs text-gray-500 mt-4">
+          No account? <button onclick="switchAuthTab('register')" class="text-pink-400 font-bold hover:underline">Create one free</button>
+        </p>
+        <div class="mt-4 pt-4 border-t border-white border-opacity-10">
+          <button onclick="demoLogin()" class="btn-secondary w-full text-sm">
+            <i class="fas fa-play mr-1"></i> Try Demo (no account needed)
+          </button>
+        </div>
+      </div>
+      <!-- Register form -->
+      <div id="registerForm" class="hidden">
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Your Name</label>
+            <input type="text" id="regName" placeholder="Parent / Guardian name"
+              onkeydown="if(event.key==='Enter') doRegister()" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Email Address</label>
+            <input type="email" id="regEmail" placeholder="parent@example.com"
+              onkeydown="if(event.key==='Enter') doRegister()" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Password <span class="text-gray-500">(min 6 chars)</span></label>
+            <div class="relative">
+              <input type="password" id="regPassword" placeholder="Choose a strong password"
+                onkeydown="if(event.key==='Enter') doRegister()" />
+              <button onclick="togglePwd('regPassword')"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                <i class="fas fa-eye text-sm"></i>
+              </button>
+            </div>
+          </div>
+          <div id="regError" class="hidden text-red-400 text-xs px-1"></div>
+          <button onclick="doRegister()" id="registerBtn" class="btn-primary w-full mt-2">
+            <i class="fas fa-user-plus mr-2"></i> Create Account
+          </button>
+        </div>
+        <p class="text-center text-xs text-gray-500 mt-4">
+          Already have an account? <button onclick="switchAuthTab('login')" class="text-pink-400 font-bold hover:underline">Sign in</button>
+        </p>
+      </div>
+    </div>
+    <p class="text-center text-xs text-gray-600 mt-4">🔒 Data stored securely · No ads · Child-safe</p>
+  </div>
+</div>
 
 <!-- Stars & Music Notes -->
 <div class="stars" id="stars"></div>
@@ -557,9 +663,19 @@ function getMainHTML(): string {
         <div class="engagement-dot bg-green-400"></div>
         <span>Live Session</span>
       </div>
-      <button onclick="openModal('addProfileModal')" class="btn-primary text-sm">
-        <i class="fas fa-plus mr-1"></i> New Profile
-      </button>
+      <div class="flex items-center gap-2">
+        <!-- Logged-in user badge with logout -->
+        <div id="userBadge" class="hidden items-center gap-2 glass-light px-3 py-1.5 rounded-full text-sm">
+          <i class="fas fa-user-circle text-purple-400"></i>
+          <span id="userBadgeName" class="font-bold text-white text-xs"></span>
+          <button onclick="doLogout()" class="text-gray-400 hover:text-red-400 transition ml-1" title="Sign out">
+            <i class="fas fa-sign-out-alt text-xs"></i>
+          </button>
+        </div>
+        <button onclick="openModal('addProfileModal')" class="btn-primary text-sm">
+          <i class="fas fa-plus mr-1"></i> New Profile
+        </button>
+      </div>
     </div>
   </header>
 
@@ -676,17 +792,37 @@ function getMainHTML(): string {
                 <i class="fas fa-stop mr-1"></i> Stop
               </button>
             </div>
-            <!-- Mini-games -->
-            <div class="mt-2 grid grid-cols-3 gap-1">
-              <button onclick="startMiniGame('repeat')" class="song-pill text-xs justify-center py-1.5" title="Repeat After Me">
-                🎤 Repeat
+            <!-- Mini-games SPOTLIGHT — always visible, always free, no session needed -->
+            <div class="mt-3" style="border:2px solid rgba(255,200,50,0.4);border-radius:16px;background:rgba(255,200,50,0.05);padding:10px">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-xs font-black text-yellow-300 flex items-center gap-1">
+                  <i class="fas fa-gamepad text-yellow-400"></i> 
+                  PLAY NOW — Always Free!
+                </div>
+                <span class="text-xs bg-green-600 text-white font-black px-2 py-0.5 rounded-full" style="animation:pulse 1.5s ease-in-out infinite">✓ FREE</span>
+              </div>
+              <div class="grid grid-cols-3 gap-2">
+                <button onclick="startMiniGame('repeat')" class="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 font-black text-xs transition-all active:scale-95 hover:scale-105" style="background:linear-gradient(135deg,#6c3fc4,#9d4edd);border:2px solid rgba(255,255,255,0.2)">
+                  <span class="text-2xl">🎤</span>
+                  <span>Repeat</span>
+                  <span class="text-purple-300 font-normal" style="font-size:9px">Echo back!</span>
+                </button>
+                <button onclick="startMiniGame('clap')" class="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 font-black text-xs transition-all active:scale-95 hover:scale-105" style="background:linear-gradient(135deg,#c4503f,#e86c4d);border:2px solid rgba(255,255,255,0.2)">
+                  <span class="text-2xl">👏</span>
+                  <span>Clap!</span>
+                  <span class="text-orange-200 font-normal" style="font-size:9px">Tap the beat</span>
+                </button>
+                <button onclick="startMiniGame('rhythm')" class="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 font-black text-xs transition-all active:scale-95 hover:scale-105" style="background:linear-gradient(135deg,#2d6a4f,#40916c);border:2px solid rgba(255,255,255,0.2)">
+                  <span class="text-2xl">🥁</span>
+                  <span>Rhythm</span>
+                  <span class="text-green-200 font-normal" style="font-size:9px">Match it!</span>
+                </button>
+              </div>
+              <button onclick="startCallAndResponse()" class="mt-2 w-full flex items-center justify-center gap-2 rounded-2xl py-3 font-black text-sm transition-all active:scale-95 hover:scale-105" style="background:linear-gradient(135deg,#f4a261,#e76f51);border:2px solid rgba(255,255,255,0.25)">
+                <span class="text-xl">🎵</span> 
+                <span>Call &amp; Response — Sing with me!</span>
               </button>
-              <button onclick="startMiniGame('clap')" class="song-pill text-xs justify-center py-1.5" title="Clap Game">
-                👏 Clap
-              </button>
-              <button onclick="startMiniGame('rhythm')" class="song-pill text-xs justify-center py-1.5" title="Rhythm Match">
-                🥁 Rhythm
-              </button>
+              <p class="text-center text-xs text-gray-500 mt-2">Tap any game to start instantly · No setup needed</p>
             </div>
           </div>
         </div>
@@ -3000,14 +3136,86 @@ const MINIGAME = {
 };
 
 function startMiniGame(type) {
-  if (!STATE.sessionActive && !STATE.selectedChild) {
-    showToast('Start a session to play mini-games!', '⚠️', 'warning');
-    return;
+  // Mini-games are FREE — no session required, just start playing!
+  if (!STATE.selectedChild) {
+    // Even without a profile, allow the game with a generic name
+    if (!STATE.selectedChild) STATE.selectedChild = { name: 'friend', age: 5 };
   }
+  // Init audio context if needed (requires user gesture, and this IS a gesture)
+  AUDIO.init(); AUDIO.resume();
   MINIGAME.start(type);
 }
 
-function closeMiniGame() { MINIGAME.close(); }
+// ── Call & Response interaction ──────────────────────────────────────────────
+// "MusicBuddy sings a phrase, child echoes back" — totally free, no session needed
+async function startCallAndResponse() {
+  AUDIO.init(); AUDIO.resume();
+  const name = STATE.selectedChild?.name || 'friend';
+  const phrases = [
+    { call: \`Hey \${name}! Echo me — La la LA!\`, response: 'La la LA!' },
+    { call: 'If you are happy and you know it, CLAP CLAP!', response: 'CLAP CLAP!' },
+    { call: \`\${name}! Can you say — DO RE MI?\`, response: 'DO RE MI!' },
+    { call: 'Everybody say — YEAH YEAH YEAH!', response: 'YEAH YEAH YEAH!' },
+    { call: 'Boom chicka BOOM chicka BOOM!', response: 'BOOM chicka BOOM!' },
+    { call: \`\${name}, repeat after me — One two THREE!\`, response: 'One two THREE!' },
+    { call: 'Hip hip — HOORAY!', response: 'HOORAY!' },
+    { call: 'When I say MusicBuddy, you say ROCKS! MusicBuddy...', response: 'ROCKS!' },
+  ];
+  const chosen = phrases[Math.floor(Math.random() * phrases.length)];
+
+  // Show a fun full-screen modal for call and response
+  const modal = document.getElementById('miniGameModal');
+  const titleEl = document.getElementById('miniGameTitle');
+  const contentEl = document.getElementById('miniGameContent');
+  if (!modal || !contentEl) {
+    // Fallback — just speak
+    addChatBubble('🎵 ' + chosen.call, 'ai');
+    await speakText(chosen.call);
+    setTimeout(() => {
+      addChatBubble('Now YOU say: ' + chosen.response + ' 🎤', 'ai');
+      speakText('Now your turn! Say: ' + chosen.response);
+    }, 800);
+    return;
+  }
+
+  titleEl.textContent = '🎤 Call & Response!';
+  contentEl.innerHTML = \`
+    <div class="text-center py-4">
+      <div class="text-5xl mb-4 animate-bounce">🎵</div>
+      <div id="carPhase" class="text-xl font-black text-white mb-4">MusicBuddy says...</div>
+      <div id="carText" class="text-2xl font-black text-yellow-300 mb-6 px-4">\${chosen.call}</div>
+      <div id="carYourTurn" class="hidden mt-4">
+        <div class="text-lg font-black text-pink-300 mb-2">🎤 Your turn! Say it back!</div>
+        <div class="text-3xl font-black text-green-300">\${chosen.response}</div>
+      </div>
+      <div id="carButtons" class="mt-6 flex gap-3 justify-center">
+        <button onclick="closeMiniGame()" class="btn-secondary text-sm">Close</button>
+        <button onclick="carNextRound()" class="btn-primary text-sm">
+          <i class="fas fa-redo mr-1"></i>Another!
+        </button>
+      </div>
+    </div>\`;
+  modal.style.display = 'flex';
+  modal.classList.remove('hidden');
+
+  // Speak the call phrase
+  addChatBubble('🎵 ' + chosen.call, 'ai');
+  await speakText(chosen.call);
+
+  // Show "your turn" prompt
+  const yourTurn = document.getElementById('carYourTurn');
+  const phase = document.getElementById('carPhase');
+  if (yourTurn && phase) {
+    phase.textContent = 'Now YOU say...';
+    yourTurn.classList.remove('hidden');
+  }
+  speakText('Now YOUR turn! Say: ' + chosen.response);
+
+  // Award XP
+  if (REWARDS) REWARDS.fire('micro', { trigger: 'call_response' });
+}
+
+window.carNextRound = function() { closeMiniGame(); setTimeout(() => startCallAndResponse(), 200); };
 function closeLevelUp() {
   const modal = document.getElementById('levelUpModal');
   modal.style.display = 'none';
@@ -3305,6 +3513,7 @@ async function stopSession() {
   
   const audio = document.getElementById('audioPlayer');
   audio.pause();
+  if (STATE._synthStopFn) { STATE._synthStopFn(); STATE._synthStopFn = null; }
   STATE.isPlaying = false;
 
   const r = await api('POST', \`/sessions/\${STATE.currentSession.id}/stop\`);
@@ -3370,12 +3579,11 @@ async function triggerInteraction(trigger = 'manual') {
   if (STATE._interactionInProgress) return;
   STATE._interactionInProgress = true;
 
-  // ── GATE CHECK: manual song trigger requires starter/premium ──
-  // Auto triggers (from dopamine loop) bypass this so free experience stays fluid
-  if (trigger === 'manual' && !GATE.check('ai_music', { trigger })) {
-    STATE._interactionInProgress = false;
-    return;
-  }
+  // ── GATE CHECK: songs are FREE for everyone ──────────────────
+  // Demo songs play without any key. AI generation (Replicate/Suno)
+  // requires a key — but the demo pool always works.
+  // DO NOT gate manual play — this kills the experience.
+  // (GATE is kept only for creator_mode / family_mode)
 
   try {
     const child = STATE.selectedChild;
@@ -3487,6 +3695,138 @@ async function triggerInteraction(trigger = 'manual') {
   }
 }
 
+// ── Procedural synth song (used when no API key / CDN fails) ──────────────
+// Generates a real melodic children's song using Web Audio API oscillators.
+// Sounds like a proper generated tune — NOT a pin-drop synth noise.
+function playSynthSong(style = 'playful', durationSecs = 20) {
+  AUDIO.init(); AUDIO.resume();
+  const ctx = AUDIO.ctx;
+  if (!ctx) { setTimeout(() => onAudioEnded(), durationSecs * 1000); return; }
+
+  // Stop any leftover synth
+  if (STATE._synthNodes) { STATE._synthNodes.forEach(n => { try { n.stop(); } catch(e){} }); }
+  STATE._synthNodes = [];
+
+  const vol = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+  const master = ctx.createGain(); master.gain.value = vol * 0.6;
+  master.connect(ctx.destination);
+
+  // ── Scale libraries keyed by style ──────────────────────────────
+  const SCALES = {
+    playful:     [523, 587, 659, 698, 784, 880, 988, 1047],  // C major (bright)
+    energetic:   [440, 494, 554, 587, 659, 740, 831, 880],   // A major (energetic)
+    calm:        [392, 440, 494, 523, 587, 659, 698, 784],   // G major (warm)
+    lullaby:     [349, 392, 440, 466, 523, 587, 622, 698],   // F major (soft)
+    educational: [523, 587, 659, 698, 784, 880, 988, 1047],  // C major (clear)
+    adventure:   [440, 494, 554, 587, 659, 740, 831, 880],   // A major (bold)
+  };
+  const scale = SCALES[style] || SCALES.playful;
+
+  // ── Rhythmic patterns per style ──────────────────────────────────
+  const PATTERNS = {
+    playful:     [0,2,4,2,3,5,3,2,0,4,2,0,5,3,2,4],
+    energetic:   [0,0,4,0,4,0,5,4,3,3,7,3,5,3,4,0],
+    calm:        [0,1,2,3,4,3,2,1,0,2,4,3,2,0,1,3],
+    lullaby:     [0,2,4,2,0,2,4,3,2,1,0,2,4,2,0,1],
+    educational: [0,2,4,5,7,5,4,2,0,4,2,4,5,4,2,0],
+    adventure:   [0,4,7,4,5,7,5,4,3,7,5,3,4,5,4,0],
+  };
+  const pattern = PATTERNS[style] || PATTERNS.playful;
+  const bpm = style === 'energetic' ? 128 : style === 'calm' || style === 'lullaby' ? 80 : 100;
+  const noteLen = 60 / bpm;           // one beat in seconds
+  const totalNotes = Math.min(pattern.length * 2, Math.floor(durationSecs / noteLen));
+
+  const nodes = [];
+  let t = ctx.currentTime + 0.05;
+
+  for (let i = 0; i < totalNotes; i++) {
+    const freq = scale[pattern[i % pattern.length]];
+    const gate = noteLen * 0.8;
+
+    // Lead melody
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(0.55, t + 0.02);
+    env.gain.setValueAtTime(0.45, t + gate - 0.04);
+    env.gain.linearRampToValueAtTime(0, t + gate);
+    osc.connect(env); env.connect(master);
+    osc.start(t); osc.stop(t + gate);
+    nodes.push(osc);
+
+    // Harmony (5th above — every other note)
+    if (i % 2 === 0) {
+      const osc2 = ctx.createOscillator();
+      const env2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.value = freq * 1.5;
+      env2.gain.setValueAtTime(0, t);
+      env2.gain.linearRampToValueAtTime(0.18, t + 0.03);
+      env2.gain.linearRampToValueAtTime(0, t + gate);
+      osc2.connect(env2); env2.connect(master);
+      osc2.start(t); osc2.stop(t + gate);
+      nodes.push(osc2);
+    }
+
+    // Bass (root, every 2 beats)
+    if (i % 2 === 0) {
+      const bass = ctx.createOscillator();
+      const bassEnv = ctx.createGain();
+      bass.type = 'sine';
+      bass.frequency.value = freq / 2;
+      bassEnv.gain.setValueAtTime(0, t);
+      bassEnv.gain.linearRampToValueAtTime(0.3, t + 0.02);
+      bassEnv.gain.exponentialRampToValueAtTime(0.001, t + noteLen * 2);
+      bass.connect(bassEnv); bassEnv.connect(master);
+      bass.start(t); bass.stop(t + noteLen * 2);
+      nodes.push(bass);
+    }
+
+    // Kick drum on beats 1+3
+    if (i % 4 === 0 || i % 4 === 2) {
+      const kick = ctx.createOscillator(); const kickEnv = ctx.createGain();
+      kick.type = 'sine'; kick.frequency.setValueAtTime(160, t);
+      kick.frequency.exponentialRampToValueAtTime(40, t + 0.08);
+      kickEnv.gain.setValueAtTime(0.6, t); kickEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      kick.connect(kickEnv); kickEnv.connect(master);
+      kick.start(t); kick.stop(t + 0.2);
+      nodes.push(kick);
+    }
+
+    // Hi-hat click on every beat
+    const noiseLen = 0.04;
+    const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * noiseLen, ctx.sampleRate);
+    const nd = noiseBuf.getChannelData(0);
+    for (let k = 0; k < nd.length; k++) nd[k] = (Math.random() * 2 - 1) * 0.15;
+    const hat = ctx.createBufferSource(); const hatEnv = ctx.createGain();
+    hat.buffer = noiseBuf;
+    hatEnv.gain.setValueAtTime(0.4, t + 0.01); hatEnv.gain.exponentialRampToValueAtTime(0.001, t + noiseLen);
+    hat.connect(hatEnv); hatEnv.connect(master);
+    hat.start(t + 0.01);
+    nodes.push(hat);
+
+    t += noteLen;
+  }
+
+  STATE._synthNodes = nodes;
+  STATE._synthMaster = master;
+
+  // Fire onAudioEnded after the synth completes
+  const totalTime = totalNotes * noteLen * 1000;
+  clearTimeout(STATE._synthEndTimeout);
+  STATE._synthEndTimeout = setTimeout(() => {
+    if (STATE.isPlaying) onAudioEnded();
+  }, totalTime + 300);
+
+  // Make stop button work with synth
+  STATE._synthStopFn = () => {
+    nodes.forEach(n => { try { n.stop(); } catch(e){} });
+    clearTimeout(STATE._synthEndTimeout);
+  };
+}
+
 // ── Audio Player ──────────────────────────────────────────────
 function playAudio(url, title, style, duration) {
   // Stop any ongoing TTS speech before music plays
@@ -3496,21 +3836,57 @@ function playAudio(url, title, style, duration) {
   AUDIO.init();
   AUDIO.resume();
 
-  const audio = document.getElementById('audioPlayer');
-  audio.src = url;
-  audio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
-  audio.play().catch(() => {
-    showToast('Auto-play blocked. Click play button.', '🔊', 'warning');
-  });
-  
+  // ── HIT SOUND: punchy drum+synth burst on every song start ──
+  try {
+    const ctx = AUDIO.ctx;
+    if (ctx) {
+      const now = ctx.currentTime;
+      // Kick drum: sub-bass thump
+      const kick = ctx.createOscillator(); const kickGain = ctx.createGain();
+      kick.connect(kickGain); kickGain.connect(AUDIO.masterGain || ctx.destination);
+      kick.type = 'sine'; kick.frequency.setValueAtTime(150, now);
+      kick.frequency.exponentialRampToValueAtTime(40, now + 0.08);
+      kickGain.gain.setValueAtTime(0.7, now); kickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      kick.start(now); kick.stop(now + 0.2);
+      // Synth accent: bright zing
+      const zing = ctx.createOscillator(); const zingGain = ctx.createGain();
+      zing.connect(zingGain); zingGain.connect(AUDIO.masterGain || ctx.destination);
+      zing.type = 'square'; zing.frequency.setValueAtTime(880, now + 0.02);
+      zing.frequency.exponentialRampToValueAtTime(440, now + 0.1);
+      zingGain.gain.setValueAtTime(0.3, now + 0.02); zingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      zing.start(now + 0.02); zing.stop(now + 0.15);
+      // Hi-hat noise click
+      const buf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
+      const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1)*0.4;
+      const hat = ctx.createBufferSource(); const hatGain = ctx.createGain();
+      hat.buffer = buf; hat.connect(hatGain); hatGain.connect(AUDIO.masterGain || ctx.destination);
+      hatGain.gain.setValueAtTime(0.5, now + 0.01); hatGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      hat.start(now + 0.01);
+    }
+  } catch(e) { /* non-critical */ }
+
+  // ── '__synth__' = no API key → play procedural Web Audio song (always works) ──
+  if (url === '__synth__') {
+    playSynthSong(style || 'playful', duration || 20);
+  } else {
+    const audio = document.getElementById('audioPlayer');
+    audio.src = url;
+    audio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+    audio.play().catch(() => {
+      // Real URL failed — fall back to synth immediately
+      showToast('Streaming song... using built-in music!', '🎵', 'info');
+      playSynthSong(style || 'playful', duration || 20);
+    });
+  }
+
   STATE.isPlaying = true;
   STATE.progressStart = Date.now();
-  STATE.progressDuration = (duration || 25) * 1000;
-  
+  STATE.progressDuration = (duration || 20) * 1000;
+
   document.getElementById('nowPlayingTitle').textContent = title || 'AI Music Snippet';
   document.getElementById('nowPlayingStyle').textContent = (STYLE_EMOJIS[style]||'🎵') + ' ' + style + ' • AI Generated';
   document.getElementById('nowPlayingEmoji').textContent = STYLE_EMOJIS[style] || '🎵';
-  document.getElementById('timeDuration').textContent = \`0:\${String(duration||25).padStart(2,'0')}\`;
+  document.getElementById('timeDuration').textContent = \`0:\${String(duration||20).padStart(2,'0')}\`;
   
   updateStateUI('sing', 'playing');
 
@@ -3606,6 +3982,7 @@ function skipSnippet() {
   if (!STATE.sessionActive) { showToast('Start a session first!', '⚠️', 'warning'); return; }
   const audio = document.getElementById('audioPlayer');
   audio.pause();
+  if (STATE._synthStopFn) { STATE._synthStopFn(); STATE._synthStopFn = null; }
   STATE.isPlaying = false;
   clearInterval(STATE.progressTimer);
   triggerInteraction('skip');
@@ -3833,15 +4210,20 @@ async function speakText(text) {
     utter.pitch = STATE.energyLevel === 'high' ? 1.35 : STATE.energyLevel === 'low' ? 1.05 : 1.2;
     utter.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
     
-    // Try to pick a warm, friendly voice
+    // Try to pick the warmest, friendliest voice available
+    // Priority order: Google UK/US female → Samantha → Karen → any English female → any English
     const voices = window.speechSynthesis.getVoices();
-    const friendly = voices.find(v => 
-      v.name.includes('Samantha') || 
-      v.name.includes('Karen') ||
-      v.name.includes('Moira') ||
-      v.name.includes('Google UK English Female') ||
-      (v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
-    ) || voices.find(v => v.lang.startsWith('en'));
+    const pick = (fn) => voices.find(fn);
+    const friendly = 
+      pick(v => v.name === 'Google UK English Female') ||
+      pick(v => v.name === 'Google US English') ||
+      pick(v => v.name.includes('Samantha')) ||
+      pick(v => v.name.includes('Karen')) ||
+      pick(v => v.name.includes('Moira')) ||
+      pick(v => v.name.includes('Tessa')) ||
+      pick(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female')) ||
+      pick(v => v.lang === 'en-US' || v.lang === 'en-GB') ||
+      pick(v => v.lang.startsWith('en'));
     if (friendly) utter.voice = friendly;
 
     utter.onend = () => resolve();
@@ -4765,6 +5147,216 @@ function initCreatorTab() {
   }
 }
 
+// ══════════════════════════════════════════════════════════
+// AUTH SYSTEM — Login / Register / Logout / Session Restore
+// Tokens stored in localStorage; API calls use Bearer header
+// ══════════════════════════════════════════════════════════
+
+const AUTH = {
+  get token() { return localStorage.getItem('mb_auth_token'); },
+  get user()  { return JSON.parse(localStorage.getItem('mb_auth_user') || 'null'); },
+};
+
+// Auth-aware fetch helper (attaches Bearer token)
+async function apiAuth(method, path, body = null) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  const token = localStorage.getItem('mb_auth_token');
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    const res = await fetch('/api' + path, opts);
+    return await res.json();
+  } catch(e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function switchAuthTab(tab) {
+  document.getElementById('loginForm').classList.toggle('hidden', tab !== 'login');
+  document.getElementById('registerForm').classList.toggle('hidden', tab !== 'register');
+  // Update tab button styling
+  const loginTab    = document.getElementById('authTabLogin');
+  const registerTab = document.getElementById('authTabRegister');
+  if (loginTab)    loginTab.classList.toggle('auth-tab-active', tab === 'login');
+  if (loginTab)    loginTab.classList.toggle('text-gray-400', tab !== 'login');
+  if (registerTab) registerTab.classList.toggle('auth-tab-active', tab === 'register');
+  if (registerTab) registerTab.classList.toggle('text-gray-400', tab !== 'register');
+  showAuthError('');
+}
+
+function togglePwd(fieldId, iconId) {
+  const f = document.getElementById(fieldId);
+  const i = document.getElementById(iconId);
+  if (!f) return;
+  f.type = f.type === 'password' ? 'text' : 'password';
+  if (i) i.className = f.type === 'text' ? 'fas fa-eye-slash' : 'fas fa-eye';
+}
+
+function showAuthError(msg) {
+  // Show error in whichever error element is currently visible
+  ['authError', 'loginError', 'regError'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+    el.classList.toggle('hidden', !msg);
+  });
+}
+
+function onAuthSuccess(data) {
+  localStorage.setItem('mb_auth_token', data.token);
+  localStorage.setItem('mb_auth_user', JSON.stringify(data.user));
+
+  // Update header badge
+  const badge = document.getElementById('userBadge');
+  const badgeName = document.getElementById('userBadgeName');
+  if (badge) badge.style.display = 'flex';
+  if (badgeName) badgeName.textContent = data.user.name;
+
+  // Hide auth screen, show app
+  const authScreen = document.getElementById('authScreen');
+  if (authScreen) authScreen.style.display = 'none';
+
+  showToast('Welcome back, ' + data.user.name + '! 🎵', '🎉', 'success');
+  init();
+}
+
+async function doLogin() {
+  const btn = document.getElementById('loginBtn');
+  const email = document.getElementById('loginEmail')?.value?.trim();
+  const password = document.getElementById('loginPassword')?.value;
+  if (!email || !password) { showAuthError('Please enter email and password'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+  showAuthError('');
+  try {
+    const r = await apiAuth('POST', '/auth/login', { email, password });
+    if (r.success) {
+      onAuthSuccess(r.data);
+    } else {
+      showAuthError(r.error || 'Login failed');
+    }
+  } catch(e) {
+    showAuthError('Connection error. Please try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
+  }
+}
+
+async function doRegister() {
+  const btn = document.getElementById('registerBtn');
+  const name     = document.getElementById('regName')?.value?.trim();
+  const email    = document.getElementById('regEmail')?.value?.trim();
+  const password = document.getElementById('regPassword')?.value;
+  if (!name || !email || !password) { showAuthError('Please fill in all fields'); return; }
+  if (password.length < 6) { showAuthError('Password must be at least 6 characters'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating account...'; }
+  showAuthError('');
+  try {
+    const r = await apiAuth('POST', '/auth/register', { name, email, password });
+    if (r.success) {
+      onAuthSuccess(r.data);
+    } else {
+      showAuthError(r.error || 'Registration failed');
+    }
+  } catch(e) {
+    showAuthError('Connection error. Please try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
+  }
+}
+
+function demoLogin() {
+  // Bypass auth — run as demo user
+  const demoUser = { id: 0, name: 'Demo User', email: 'demo@musicbuddy.ai', role: 'demo' };
+  localStorage.setItem('mb_auth_user', JSON.stringify(demoUser));
+  localStorage.removeItem('mb_auth_token'); // no token for demo
+
+  const badge = document.getElementById('userBadge');
+  const badgeName = document.getElementById('userBadgeName');
+  if (badge) badge.style.display = 'flex';
+  if (badgeName) badgeName.textContent = '🎮 Demo';
+
+  const authScreen = document.getElementById('authScreen');
+  if (authScreen) authScreen.style.display = 'none';
+
+  showToast('Demo mode — no account needed! 🎵', '🎮', 'success');
+  init();
+}
+
+async function doLogout() {
+  // Call server logout endpoint (invalidates token)
+  if (AUTH.token) {
+    try { await apiAuth('POST', '/auth/logout'); } catch(e) { /* ignore */ }
+  }
+  localStorage.removeItem('mb_auth_token');
+  localStorage.removeItem('mb_auth_user');
+
+  // Clear UI state
+  const badge = document.getElementById('userBadge');
+  if (badge) badge.style.display = 'none';
+
+  // Stop active session if running
+  if (STATE.sessionActive) await stopSession();
+
+  // Show auth screen again
+  const authScreen = document.getElementById('authScreen');
+  if (authScreen) { authScreen.style.display = 'flex'; authScreen.style.opacity = '1'; }
+
+  // Reset app state
+  STATE.selectedChild = null;
+  STATE.currentSession = null;
+
+  showToast('Logged out. See you next time! 👋', '👋', 'success');
+}
+
+async function tryRestoreSession() {
+  const token = AUTH.token;
+  const user  = AUTH.user;
+
+  if (!token && !user) {
+    // No session at all — show auth screen
+    const authScreen = document.getElementById('authScreen');
+    if (authScreen) authScreen.style.display = 'flex';
+    return false;
+  }
+
+  // Demo mode — skip token validation, go straight to app
+  if (!token && user?.role === 'demo') {
+    const badge = document.getElementById('userBadge');
+    const badgeName = document.getElementById('userBadgeName');
+    if (badge) badge.style.display = 'flex';
+    if (badgeName) badgeName.textContent = '🎮 Demo';
+    const authScreen = document.getElementById('authScreen');
+    if (authScreen) authScreen.style.display = 'none';
+    return true;
+  }
+
+  // Validate token against server
+  try {
+    const r = await apiAuth('GET', '/auth/me');
+    if (r.success) {
+      localStorage.setItem('mb_auth_user', JSON.stringify(r.data.user));
+      const badge = document.getElementById('userBadge');
+      const badgeName = document.getElementById('userBadgeName');
+      if (badge) badge.style.display = 'flex';
+      if (badgeName) badgeName.textContent = r.data.user.name;
+      const authScreen = document.getElementById('authScreen');
+      if (authScreen) authScreen.style.display = 'none';
+      return true;
+    }
+  } catch(e) { /* fall through */ }
+
+  // Token invalid — clear storage and show auth screen
+  localStorage.removeItem('mb_auth_token');
+  localStorage.removeItem('mb_auth_user');
+  const authScreen = document.getElementById('authScreen');
+  if (authScreen) authScreen.style.display = 'flex';
+  return false;
+}
+
 async function init() {
   // Load voices for TTS
   if ('speechSynthesis' in window) {
@@ -4812,7 +5404,18 @@ async function init() {
   }, 1000);
 }
 
-window.addEventListener('load', init);
+window.addEventListener('load', async () => {
+  // Try to restore an existing session first.
+  // tryRestoreSession() hides the auth screen and returns true if already logged in.
+  // If not, it shows the auth screen and waits for the user to log in.
+  // init() is called by onAuthSuccess (after login/register/demo).
+  const restored = await tryRestoreSession();
+  if (restored) {
+    // Already authenticated — boot the full app
+    init();
+  }
+  // else: auth screen is visible; init() will be called after login
+});
 </script>
 </body>
 </html>`;

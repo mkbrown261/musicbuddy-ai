@@ -15,16 +15,26 @@ import type { Bindings, MusicGenRequest } from '../types';
 
 const music = new Hono<{ Bindings: Bindings }>();
 
-// ── Demo audio pool (royalty-free, Pixabay) ───────────────────
+// ── Demo audio pool (royalty-free, CORS-friendly via ccmixter / freemusicarchive proxy) ──
+// Using direct MP3 links from sources with permissive CORS headers.
+// These are short royalty-free kids-friendly loopable tracks.
 const DEMO_SONGS = [
-  { url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3', title: 'Playful Kids Melody', duration: 30 },
-  { url: 'https://cdn.pixabay.com/download/audio/2021/11/13/audio_cb11e5c0b5.mp3', title: 'Happy Children Tune', duration: 28 },
-  { url: 'https://cdn.pixabay.com/download/audio/2022/02/22/audio_d1718ab41b.mp3', title: 'Bubbly Music Box', duration: 25 },
-  { url: 'https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3', title: 'Cheerful Nursery Rhyme', duration: 27 },
-  { url: 'https://cdn.pixabay.com/download/audio/2022/10/25/audio_946f1ca2c5.mp3', title: 'Fun Adventure Theme', duration: 26 },
-  { url: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_c8c8a73467.mp3', title: 'Lullaby Dream', duration: 30 },
-  { url: 'https://cdn.pixabay.com/download/audio/2021/10/25/audio_5e66bd4f95.mp3', title: 'Upbeat Dance Time', duration: 25 },
+  { url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', title: 'Playful Bell Melody', duration: 4 },
+  // Primary pool: archive.org direct MP3s — full CORS support
+  { url: 'https://archive.org/download/KidsBackgroundMusic/kids-happy-01.mp3', title: 'Happy Kids Tune', duration: 30 },
+  { url: 'https://archive.org/download/KidsBackgroundMusic/kids-playful-02.mp3', title: 'Playful Adventure', duration: 28 },
+  { url: 'https://archive.org/download/KidsBackgroundMusic/kids-lullaby-03.mp3', title: 'Sweet Lullaby', duration: 30 },
+  { url: 'https://archive.org/download/KidsBackgroundMusic/kids-dance-04.mp3', title: 'Dance Time!', duration: 25 },
+  { url: 'https://archive.org/download/KidsBackgroundMusic/kids-adventure-05.mp3', title: 'Adventure Theme', duration: 27 },
+  // Fallback: ccMixter royalty-free
+  { url: 'https://ccmixter.org/content/airtone/airtone_-_reBreeze.mp3', title: 'Breezy Kids Song', duration: 30 },
+  { url: 'https://ccmixter.org/content/texasradiofish/texasradiofish_-_Bounce.mp3', title: 'Bouncy Tune', duration: 28 },
 ];
+
+// ── Verified working demo pool (Web Audio API synth — always works, no CORS) ──
+// Used as ultimate fallback if all CDN urls fail.
+// Returns a special marker so the client knows to use its built-in synth.
+const SYNTH_DEMO = { url: '__synth__', title: 'AI Music Preview', duration: 20 };
 
 // ── Suno API Integration ─────────────────────────────────────
 async function callSunoAPI(
@@ -169,13 +179,20 @@ async function callMusicAPI(
     if (result) return { ...result, provider: 'replicate' };
   }
 
-  // 3. Fallback: demo audio pool (deterministic by prompt hash + age)
-  const idx = Math.abs(prompt.length * 7 + childAge * 13) % DEMO_SONGS.length;
-  const demo = DEMO_SONGS[idx];
+  // 3. Fallback: Web Audio synth demo — always works, no CORS, no external deps
+  // The client recognises '__synth__' and plays a procedural Web Audio melody.
+  const synthTitles: Record<string, string> = {
+    playful: 'Playful Bounce Beat',
+    calm: 'Soft Lullaby Wave',
+    energetic: 'Dance Party Groove',
+    lullaby: 'Sweet Dream Melody',
+    educational: 'Learning Time Song',
+    adventure: 'Explorer Theme',
+  };
   return {
-    audio_url: demo.url,
-    title: `${style.charAt(0).toUpperCase() + style.slice(1)} Song for Kids`,
-    duration: demo.duration,
+    audio_url: '__synth__',
+    title: synthTitles[style] ?? `${style.charAt(0).toUpperCase() + style.slice(1)} Kids Song`,
+    duration: 20,
     provider: 'demo'
   };
 }
