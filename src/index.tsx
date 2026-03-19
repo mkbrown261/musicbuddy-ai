@@ -1549,24 +1549,41 @@ function getMainHTML(): string {
           <span class="text-xs font-normal text-green-400 ml-auto px-2 py-1 rounded-full" style="background:rgba(0,200,100,0.15)" id="voiceEngineStatus">Loading...</span>
         </h3>
 
-        <!-- Girl / Boy toggle -->
+        <!-- Character Voice Selector — Luna / Max / Bubbles -->
         <div class="mb-5">
-          <label class="text-sm font-bold text-gray-300 block mb-3">Host Voice Gender</label>
-          <div class="grid grid-cols-2 gap-3">
-            <button id="voiceGenderFemale" onclick="setVoiceGender('female')"
-              class="voice-gender-btn flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all"
+          <label class="text-sm font-bold text-gray-300 block mb-3">
+            <i class="fas fa-star text-yellow-400 mr-1"></i> Choose Your Host Character
+          </label>
+          <div class="grid grid-cols-3 gap-2">
+            <!-- Luna: warm female default -->
+            <button id="charLuna" onclick="setCharacterVoice('luna')"
+              class="char-voice-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 transition-all"
               style="border-color:#ff6b9d;background:rgba(255,107,157,0.15)">
-              <span class="text-3xl">🎀</span>
-              <span class="font-black text-sm">Girl Voice</span>
-              <span class="text-xs text-gray-400">Warm &amp; nurturing</span>
+              <span class="text-3xl">🌙</span>
+              <span class="font-black text-xs">Luna</span>
+              <span class="text-xs text-gray-400">Warm &amp; kind</span>
             </button>
-            <button id="voiceGenderMale" onclick="setVoiceGender('male')"
-              class="voice-gender-btn flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all"
+            <!-- Max: friendly energetic male -->
+            <button id="charMax" onclick="setCharacterVoice('max')"
+              class="char-voice-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 transition-all"
               style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
-              <span class="text-3xl">🧢</span>
-              <span class="font-black text-sm">Boy Voice</span>
-              <span class="text-xs text-gray-400">Friendly &amp; fun</span>
+              <span class="text-3xl">⚡</span>
+              <span class="font-black text-xs">Max</span>
+              <span class="text-xs text-gray-400">Fun &amp; bold</span>
             </button>
+            <!-- Bubbles: playful female upbeat -->
+            <button id="charBubbles" onclick="setCharacterVoice('bubbles')"
+              class="char-voice-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 transition-all"
+              style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+              <span class="text-3xl">🫧</span>
+              <span class="font-black text-xs">Bubbles</span>
+              <span class="text-xs text-gray-400">Silly &amp; bright</span>
+            </button>
+          </div>
+          <!-- Selected character info -->
+          <div id="selectedCharInfo" class="mt-2 text-center text-xs text-purple-300 py-1 rounded-lg"
+            style="background:rgba(168,85,247,0.1)">
+            🌙 Luna — Warm female host (Rachel voice)
           </div>
         </div>
 
@@ -1852,6 +1869,7 @@ const STATE = {
   cycleLog: [],
   smileCount: 0,
   laughCount: 0,
+  attentionLoss: 0,   // Phase 2: camera attention loss counter
   gazeX: 0.5,
   gazeY: 0.5,
   engScore: 0,
@@ -1871,6 +1889,8 @@ const STATE = {
   // Phase 3 additions
   _adaptiveProfile: null,  // cached adaptive profile for Intent Layer
   _predictedNextStyle: null, // predicted next style from Intent Layer
+  // Phase 2 Alive System
+  lastDetectedEmotion: 'happy',  // last emotion detected by engine
 };
 
 // ══════════════════════════════════════════════════════════
@@ -4886,9 +4906,9 @@ async function speakText(text, emotionHint) {
         : 'friendly');
 
   // ── INTENT LAYER: REQUEST_TTS ──────────────────────────────────
-  // The orchestrator handles provider selection, cache lookup,
-  // tier resolution, fallback chain, and usage tracking.
-  // Frontend only needs to POST one intent and play the result.
+  // Phase 2: passes userText for emotion detection, engagement
+  // signals from camera, and behaviorTone from Groq.
+  // Response now includes emotion label + ambientMusic payload.
   try {
     const r = await api('POST', '/intent', {
       intent:    'REQUEST_TTS',
@@ -4896,13 +4916,30 @@ async function speakText(text, emotionHint) {
       childId:   STATE.selectedChild?.id ?? undefined,
       sessionId: STATE.currentSession?.id ?? undefined,
       data: {
-        text:    expressiveText,
-        emotion: resolvedEmotion,
-        style:   STATE.sessionActive ? 'children_host' : 'neutral',
+        text:        expressiveText,
+        userText:    text,
+        emotion:     resolvedEmotion,
+        style:       STATE.sessionActive ? 'children_host' : 'neutral',
+        behaviorTone: emotionHint,
+        engagement:  {
+          smileCount:    STATE.smileCount    || 0,
+          laughCount:    STATE.laughCount    || 0,
+          attentionLoss: STATE.attentionLoss || 0,
+          intensity:     (STATE.engScore || 50) / 100,
+          voiceDetected: false,
+        },
       },
     });
 
     if (r.success && r.data?.audioUrl) {
+      // ── Trigger ambient background music ─────────────────────
+      if (r.data.ambientMusic && r.data.ambientMusic.trackUrl) {
+        AMBIENT_MUSIC.play(r.data.ambientMusic);
+      } else {
+        const clientEmotion = detectEmotionClient(text);
+        AMBIENT_MUSIC.playVibe(emotionToVibe(clientEmotion));
+      }
+
       // ── Server-generated audio (OpenAI / ElevenLabs / Polly) ──
       const bgAudio = document.getElementById('audioPlayer');
       if (STATE.isPlaying && bgAudio) bgAudio.volume = Math.max(0.1, bgAudio.volume * 0.3);
@@ -4911,9 +4948,9 @@ async function speakText(text, emotionHint) {
       if (r.data.trialRemaining !== undefined && r.data.trialRemaining <= 3) {
         showToast(
           r.data.trialRemaining === 0
-            ? 'Premium voice trial ended. Upgrade for ElevenLabs! 🎤'
+            ? 'Premium voice trial ended. Upgrade for ElevenLabs! \u{1F3A4}'
             : \`Premium voice: \${r.data.trialRemaining} uses left\`,
-          '🎤',
+          '\u{1F3A4}',
           r.data.trialRemaining === 0 ? 'warning' : 'info'
         );
       }
@@ -4929,13 +4966,16 @@ async function speakText(text, emotionHint) {
           if (STATE.isPlaying && bgAudio) {
             bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
           }
+          AMBIENT_MUSIC.fadeOut(2000);
           resolve();
         };
         ttsAudio.onerror = () => resolve();
         ttsAudio.play().catch(() => resolve());
       });
     }
-    // Fall through to Web Speech API if audioUrl is null (demo mode)
+    // Fall through to Web Speech API — still play ambient
+    const clientEmotion = detectEmotionClient(text);
+    AMBIENT_MUSIC.playVibe(emotionToVibe(clientEmotion));
   } catch (e) {
     // Intent endpoint unavailable — fall through to browser TTS
   }
@@ -6097,30 +6137,105 @@ async function tryRestoreSession() {
 
 // ============================================================
 // VOICE PERSONALITY ENGINE — Frontend Controller
-// 3-Stage Pipeline: Groq Rewrite → Voice Select → ElevenLabs
+// Phase 2 "Alive System" — 5-Stage Pipeline:
+//   Input → Emotion Detection → Memory → Groq Personality
+//   → ElevenLabs TTS → Ambient Music Layer
 // ============================================================
 const VOICE_PERSONALITY = {
   gender:      'female',
   style:       'default',
+  character:   'luna',   // luna | max | bubbles
   stability:   0.35,
   styleBoost:  0.75,
   similarity:  0.60,
   groqEnabled: true,
   _saved:      false,
+  // Character → gender + style mapping
+  CHARACTERS: {
+    luna:    { gender: 'female', style: 'default',  emoji: '🌙', desc: 'Luna — Warm female host (Rachel voice)',     label: 'Luna' },
+    max:     { gender: 'male',   style: 'energetic', emoji: '⚡', desc: 'Max — Fun energetic male (Josh voice)',      label: 'Max'  },
+    bubbles: { gender: 'female', style: 'playful',  emoji: '🫧', desc: 'Bubbles — Silly bright female (Matilda)',   label: 'Bubbles' },
+  },
   VOICE_NAMES: {
     female: { default: 'Rachel (Warm Host)', playful: 'Matilda (Playful)', soothing: 'Bella (Soothing)', energetic: 'Elli (Energetic)' },
     male:   { default: 'Charlie (Narrator)', playful: 'Will (Playful)',    soothing: 'Callum (Calm)',    energetic: 'Josh (Energetic)' },
   },
 };
 
-function setVoiceGender(g) {
-  VOICE_PERSONALITY.gender = g;
+// ── Client-side emotion detection (mirrors backend EmotionEngine) ──
+const EMOTION_KEYWORDS = {
+  comfort:   ['sad','cry','crying','bad','hurt','miss','lonely','scared','afraid','tired','boring'],
+  calm:      ['sleep','sleepy','bed','night','quiet','calm','relax','slow','lullaby','peaceful'],
+  excited:   ['wow','amazing','yay','woohoo','awesome','best','love','happy','fun','excited','yess'],
+  singing:   ['sing','song','music','la','melody','beat','rhythm','dance'],
+  curious:   ['why','what','how','tell me','explain','wonder','curious','show me'],
+  surprised: ['surprise','oh my','whoa','oh wow','no way','really','omg'],
+};
+
+function detectEmotionClient(text) {
+  if (!text) return 'happy';
+  const lower = (text || '').toLowerCase();
+  for (const emotion of ['comfort','calm','excited','singing','curious','surprised']) {
+    if (EMOTION_KEYWORDS[emotion].some(function(w) { return lower.indexOf(w) !== -1; })) {
+      return emotion;
+    }
+  }
+  return 'happy';
+}
+
+// Map client emotion → TTSEmotion string for API
+function emotionToTTSEmotion(emotion) {
+  var map = { excited: 'excited', singing: 'singing', calm: 'calm',
+              comfort: 'encouraging', curious: 'friendly', surprised: 'surprised', happy: 'friendly' };
+  return map[emotion] || 'friendly';
+}
+
+// Map emotion → music vibe for ambient layer
+function emotionToVibe(emotion) {
+  var map = { excited: 'upbeat', singing: 'upbeat', happy: 'playful',
+              curious: 'playful', calm: 'soothing', comfort: 'warm', surprised: 'celebratory' };
+  return map[emotion] || 'playful';
+}
+
+// ── Character Voice Selector ──────────────────────────────────
+function setCharacterVoice(character) {
+  const chars = VOICE_PERSONALITY.CHARACTERS;
+  const char  = chars[character];
+  if (!char) return;
+  VOICE_PERSONALITY.character = character;
+  VOICE_PERSONALITY.gender    = char.gender;
+  VOICE_PERSONALITY.style     = char.style;
   const active   = 'border-color:#ff6b9d;background:rgba(255,107,157,0.15)';
   const inactive = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
-  const femBtn   = document.getElementById('voiceGenderFemale');
-  const malBtn   = document.getElementById('voiceGenderMale');
-  if (femBtn) femBtn.style.cssText = (g === 'female' ? active : inactive);
-  if (malBtn) malBtn.style.cssText = (g === 'male'   ? active : inactive);
+  ['luna','max','bubbles'].forEach(function(c) {
+    const btn = document.getElementById('char' + c.charAt(0).toUpperCase() + c.slice(1));
+    if (btn) btn.style.cssText = (c === character ? active : inactive);
+  });
+  const infoEl = document.getElementById('selectedCharInfo');
+  if (infoEl) infoEl.textContent = char.emoji + ' ' + char.desc;
+  // Also sync style buttons
+  setVoiceStyle(char.style);
+  updateExpressivenessPreview();
+}
+
+// Keep setVoiceGender for API compatibility (called by loadVoiceSettings)
+function setVoiceGender(g) {
+  VOICE_PERSONALITY.gender = g;
+  // Sync the character button if it matches
+  var matchChar = null;
+  Object.keys(VOICE_PERSONALITY.CHARACTERS).forEach(function(c) {
+    if (VOICE_PERSONALITY.CHARACTERS[c].gender === g &&
+        VOICE_PERSONALITY.CHARACTERS[c].style === VOICE_PERSONALITY.style) matchChar = c;
+  });
+  if (matchChar) {
+    var active   = 'border-color:#ff6b9d;background:rgba(255,107,157,0.15)';
+    var inactive = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+    ['luna','max','bubbles'].forEach(function(c) {
+      var btn = document.getElementById('char' + c.charAt(0).toUpperCase() + c.slice(1));
+      if (btn) btn.style.cssText = (c === matchChar ? active : inactive);
+    });
+    VOICE_PERSONALITY.character = matchChar;
+  }
   updateExpressivenessPreview();
 }
 
@@ -6216,10 +6331,10 @@ async function saveVoiceSettings() {
       similarity:      VOICE_PERSONALITY.similarity,
       groqPersonality: VOICE_PERSONALITY.groqEnabled,
     });
-    const names = VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender];
-    const voiceName = (names && names[VOICE_PERSONALITY.style]) || 'Rachel';
+    const char = VOICE_PERSONALITY.CHARACTERS[VOICE_PERSONALITY.character];
+    const charName = char ? char.label : VOICE_PERSONALITY.gender;
     if (r.success !== false) {
-      showToast('Voice settings saved! ' + voiceName, '🎤', 'success');
+      showToast('Voice saved! ' + charName + ' is your host', '🎤', 'success');
       VOICE_PERSONALITY._saved = true;
       const statusEl = document.getElementById('voiceEngineStatus');
       if (statusEl) {
@@ -6235,6 +6350,7 @@ async function saveVoiceSettings() {
   }
   localStorage.setItem('mb_voice_personality', JSON.stringify({
     gender:      VOICE_PERSONALITY.gender,
+    character:   VOICE_PERSONALITY.character,
     style:       VOICE_PERSONALITY.style,
     stability:   VOICE_PERSONALITY.stability,
     styleBoost:  VOICE_PERSONALITY.styleBoost,
@@ -6259,6 +6375,7 @@ async function loadVoiceSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem('mb_voice_personality') || '{}');
       if (saved.gender)             VOICE_PERSONALITY.gender      = saved.gender;
+      if (saved.character)          VOICE_PERSONALITY.character   = saved.character;
       if (saved.style)              VOICE_PERSONALITY.style       = saved.style;
       if (saved.stability  != null) VOICE_PERSONALITY.stability   = saved.stability;
       if (saved.styleBoost != null) VOICE_PERSONALITY.styleBoost  = saved.styleBoost;
@@ -6266,15 +6383,23 @@ async function loadVoiceSettings() {
       if (saved.groqEnabled != null) VOICE_PERSONALITY.groqEnabled = saved.groqEnabled;
     } catch(e2) {}
   }
-  setVoiceGender(VOICE_PERSONALITY.gender);
-  setVoiceStyle(VOICE_PERSONALITY.style);
+  // Restore character button highlight
+  if (VOICE_PERSONALITY.character) {
+    setCharacterVoice(VOICE_PERSONALITY.character);
+  } else {
+    setVoiceGender(VOICE_PERSONALITY.gender);
+    setVoiceStyle(VOICE_PERSONALITY.style);
+  }
   const stab = document.getElementById('elStability');
   const styl = document.getElementById('elStyleBoost');
   const sim  = document.getElementById('elSimilarity');
   const tog  = document.getElementById('groqPersonalityToggle');
-  if (stab) { stab.value = String(VOICE_PERSONALITY.stability);  document.getElementById('stabilityVal').textContent  = VOICE_PERSONALITY.stability.toFixed(2); }
-  if (styl) { styl.value = String(VOICE_PERSONALITY.styleBoost); document.getElementById('styleBoostVal').textContent = VOICE_PERSONALITY.styleBoost.toFixed(2); }
-  if (sim)  { sim.value  = String(VOICE_PERSONALITY.similarity); document.getElementById('similarityVal').textContent = VOICE_PERSONALITY.similarity.toFixed(2); }
+  const stabVal = document.getElementById('stabilityVal');
+  const stylVal = document.getElementById('styleBoostVal');
+  const simVal  = document.getElementById('similarityVal');
+  if (stab) { stab.value = String(VOICE_PERSONALITY.stability);  if (stabVal) stabVal.textContent  = VOICE_PERSONALITY.stability.toFixed(2); }
+  if (styl) { styl.value = String(VOICE_PERSONALITY.styleBoost); if (stylVal) stylVal.textContent = VOICE_PERSONALITY.styleBoost.toFixed(2); }
+  if (sim)  { sim.value  = String(VOICE_PERSONALITY.similarity); if (simVal)  simVal.textContent  = VOICE_PERSONALITY.similarity.toFixed(2); }
   if (tog)  { tog.checked = VOICE_PERSONALITY.groqEnabled; }
   updateExpressivenessPreview();
   const statusEl = document.getElementById('voiceEngineStatus');
@@ -6293,6 +6418,108 @@ function toneToEmotion(tone) {
   };
   return map[tone] || 'friendly';
 }
+
+// ============================================================
+// AMBIENT MUSIC ENGINE — Frontend Background Music Layer
+// Phase 2: layers low-volume background music under voice audio
+// Maps emotion vibes → tracks in /static/audio/ambient/
+// ============================================================
+const AMBIENT_MUSIC = (function() {
+  var _audio    = null;
+  var _current  = null;
+  var _fadeTimer= null;
+  var _enabled  = true;
+
+  // Vibe → track URL (matching backend AmbientTrack config)
+  var VIBE_TRACKS = {
+    upbeat:      '/static/audio/ambient/happy-upbeat.mp3',
+    playful:     '/static/audio/ambient/fun-kids-loop.mp3',
+    soothing:    '/static/audio/ambient/soft-piano.mp3',
+    warm:        '/static/audio/ambient/warm-ambient.mp3',
+    celebratory: '/static/audio/ambient/celebration-fanfare.mp3',
+    none:        null,
+  };
+
+  var VIBE_VOLUMES = {
+    upbeat: 0.12, playful: 0.12, soothing: 0.10,
+    warm: 0.10, celebratory: 0.18, none: 0,
+  };
+
+  function _fadeTo(targetVol, durationMs, onDone) {
+    if (!_audio) { if (onDone) onDone(); return; }
+    if (_fadeTimer) clearInterval(_fadeTimer);
+    var startVol = _audio.volume;
+    var steps = Math.max(1, Math.floor(durationMs / 50));
+    var delta = (targetVol - startVol) / steps;
+    var step = 0;
+    _fadeTimer = setInterval(function() {
+      step++;
+      var newVol = startVol + delta * step;
+      _audio.volume = Math.max(0, Math.min(1, newVol));
+      if (step >= steps) {
+        clearInterval(_fadeTimer);
+        _fadeTimer = null;
+        if (_audio.volume <= 0.001) { _audio.pause(); _audio.currentTime = 0; }
+        if (onDone) onDone();
+      }
+    }, 50);
+  }
+
+  return {
+    enable:  function() { _enabled = true; },
+    disable: function() { _enabled = false; this.stop(); },
+
+    play: function(payload) {
+      if (!_enabled || !payload || !payload.trackUrl) return;
+      var url    = payload.trackUrl;
+      var vol    = payload.volume    || 0.12;
+      var loop   = payload.loop      !== false;
+      var fadeMs = payload.fadeMs    || 600;
+      this._playUrl(url, vol, loop, fadeMs);
+    },
+
+    playVibe: function(vibe) {
+      if (!_enabled) return;
+      var url = VIBE_TRACKS[vibe] || VIBE_TRACKS.playful;
+      if (!url) return;
+      var vol  = VIBE_VOLUMES[vibe] || 0.12;
+      this._playUrl(url, vol, true, 600);
+    },
+
+    _playUrl: function(url, vol, loop, fadeMs) {
+      if (_current === url && _audio && !_audio.paused) return; // already playing
+      this.stop();
+      _current = url;
+      _audio = new Audio(url);
+      _audio.loop   = loop;
+      _audio.volume = 0;
+      _audio.onerror = function() { _audio = null; _current = null; };
+      _audio.play().then(function() {
+        _fadeTo(vol, fadeMs || 600, null);
+      }).catch(function() {
+        _audio = null; _current = null;
+      });
+    },
+
+    fadeOut: function(durationMs) {
+      _fadeTo(0, durationMs || 1000, null);
+    },
+
+    stop: function() {
+      if (_audio) {
+        _audio.pause();
+        _audio.currentTime = 0;
+        _audio = null;
+      }
+      _current = null;
+      if (_fadeTimer) { clearInterval(_fadeTimer); _fadeTimer = null; }
+    },
+
+    setVolume: function(vol) {
+      if (_audio) _audio.volume = Math.max(0, Math.min(1, vol));
+    },
+  };
+})();
 
 async function init() {
   // Load voices for TTS

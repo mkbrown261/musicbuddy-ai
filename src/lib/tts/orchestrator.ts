@@ -2,10 +2,13 @@
 // TTS Orchestrator — Master Flow Controller
 // src/lib/tts/orchestrator.ts
 // ============================================================
-// Implements the mandatory TTS flow:
+// Implements the full Phase 2 "Alive System" pipeline:
 //
 //   RequestTTS
+//   → EmotionEngine.detectEmotion (from userText + engagement)
+//   → MemoryEngine.getChildMemory  (personalised Groq prompt)
 //   → ResolveVoiceTier
+//   → GROQ Personality Stage (text rewrite, voice select)
 //   → GenerateCacheKey
 //   → RetrieveCachedAudio
 //     IF cached: return cached audio (no cost, no latency)
@@ -14,7 +17,9 @@
 //         IF failure: → HandleFallback
 //       → CacheAudio (async, non-blocking)
 //       → TrackUsage (async, non-blocking)
-//       → return audio
+//   → MemoryEngine.updateChildMemory (emotion + interaction count)
+//   → AmbientMusic.buildAmbientPayload (music vibe for frontend)
+//   → return audio + emotion + ambient
 //
 // ARCHITECTURAL RULE: This is the ONLY place provider calls
 // are coordinated. No module reaches into another directly.
@@ -33,6 +38,11 @@ import { generatePollyTTS } from './providers/polly';
 import { generateReplicateTTS } from './providers/replicate';
 import { handleFallback } from './fallback-handler';
 import { applyPersonality, mergePersonalityIntoConfig } from '../groq/personality';
+
+// Phase 2 engines
+import { detectEmotion, applyEmotionToVoiceConfig } from '../emotion/engine';
+import { getChildMemory, updateChildMemory, buildPersonalizedPrompt, checkMilestones } from '../memory/engine';
+import { buildAmbientPayload } from '../music/ambient';
 
 // ── Call the resolved provider ─────────────────────────────────
 async function callResolvedProvider(
@@ -87,38 +97,72 @@ export async function requestTTS(
   const userId = request.userId ?? 'demo';
 
   // ─────────────────────────────────────────────────────────
-  // STEP 1: ResolveVoiceTier
+  // STEP 1: EMOTION ENGINE — detect emotion from userText
+  //   Combines: text keywords + engagement signals + Groq tone
+  //   Maps → EmotionState with TTS settings + musicVibe
   // ─────────────────────────────────────────────────────────
-  const userPrefs = await getVoicePreferences(db, userId);
-  const ctx       = buildRouterContext(env, db, userId, userPrefs);
+  const emotionState = detectEmotion(
+    request.userText ?? request.text,
+    request.engagement,
+    request.behaviorTone,
+  );
+
+  // ─────────────────────────────────────────────────────────
+  // STEP 2: MEMORY ENGINE — get child's history
+  //   Personalizes the Groq system prompt with child's name,
+  //   dominant emotion, milestones, and favorite phrases.
+  // ─────────────────────────────────────────────────────────
+  let childMemory = null;
+  if (request.childId) {
+    try {
+      childMemory = await getChildMemory(db, request.childId);
+    } catch {
+      // Memory failure is non-fatal — continue without it
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // STEP 3: ResolveVoiceTier
+  // ─────────────────────────────────────────────────────────
+  const userPrefs  = await getVoicePreferences(db, userId);
+  const ctx        = buildRouterContext(env, db, userId, userPrefs);
   const resolution = await resolveVoiceTier(ctx, request);
   const { tier, voiceConfig, trialRemaining } = resolution;
 
   // ─────────────────────────────────────────────────────────
-  // STEP 2: GROQ PERSONALITY STAGE — rewrite text + select voice
-  // Transforms flat text → expressive children's host speech.
-  // Runs ONLY for ElevenLabs (Groq personality is wasted on Polly/demo).
-  // Falls back to local enrichment if Groq unavailable.
+  // STEP 4: Apply emotion settings to voice config
+  //   Overrides tier default stability/similarity/styleBoost
+  //   with emotion-specific expressiveness values.
   // ─────────────────────────────────────────────────────────
-  let finalText     = request.text;
-  let finalConfig   = voiceConfig;
+  let finalConfig = voiceConfig.provider === 'elevenlabs'
+    ? applyEmotionToVoiceConfig(voiceConfig, emotionState) as VoiceConfig
+    : voiceConfig;
+
+  // ─────────────────────────────────────────────────────────
+  // STEP 5: GROQ PERSONALITY STAGE — rewrite text + voice select
+  //   Transforms flat text → expressive children's host speech.
+  //   Runs ONLY for ElevenLabs (Groq personality wasted on Polly/demo).
+  //   Falls back to local enrichment if Groq unavailable.
+  //   Now uses personalized memory prompt if child memory exists.
+  // ─────────────────────────────────────────────────────────
+  let finalText = request.text;
 
   if (voiceConfig.provider === 'elevenlabs') {
     const gender = (userPrefs?.voiceGender as 'female' | 'male') ?? 'female';
     const personality = await applyPersonality(
       request.text,
-      voiceConfig.emotion,
-      voiceConfig.style,
+      finalConfig.emotion,
+      finalConfig.style,
       gender,
       env.GROQ_API_KEY,          // runs Groq rewrite if key present
       request.voiceOverride,     // respect explicit voice override
     );
     finalText   = personality.text;
-    finalConfig = mergePersonalityIntoConfig(voiceConfig, personality);
+    finalConfig = mergePersonalityIntoConfig(finalConfig, personality);
   }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 3: Generate cache key (on final text + final voice)
+  // STEP 6: Generate cache key (on final text + final voice)
   // ─────────────────────────────────────────────────────────
   const cacheKey = await generateCacheKey(
     finalText,
@@ -129,34 +173,35 @@ export async function requestTTS(
   const textHash = await generateTextHash(finalText);
 
   // ─────────────────────────────────────────────────────────
-  // STEP 4: RetrieveCachedAudio — NEVER regenerate if cached
+  // STEP 7: RetrieveCachedAudio — NEVER regenerate if cached
   // ─────────────────────────────────────────────────────────
   if (!request.skipCache) {
     const cached = await retrieveCachedAudio(db, cacheKey);
     if (cached) {
-      // Extend TTL if frequently used
       extendTTLIfFrequent(db, cacheKey, cached.hitCount).catch(() => {});
 
       return {
         audioUrl:        cached.audioData,
         provider:        cached.provider,
         voiceId:         cached.voiceId,
-        tier:            tier,
+        tier,
         cacheHit:        true,
         cacheKey,
         charCount:       cached.charCount,
         trialRemaining,
+        emotion:         emotionState.label,
+        ambientMusic:    buildAmbientPayload(emotionState.musicVibe),
       };
     }
   }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 5: GenerateTTS — use personality-enriched text + config
+  // STEP 8: GenerateTTS — use personality-enriched text + config
   // ─────────────────────────────────────────────────────────
   let response = await callResolvedProvider(finalText, finalConfig, env);
 
   // ─────────────────────────────────────────────────────────
-  // STEP 6: HandleFallback if generation failed
+  // STEP 9: HandleFallback if generation failed
   // ─────────────────────────────────────────────────────────
   if (!response.audioUrl) {
     const chain: TTSProvider[] = [];
@@ -167,7 +212,6 @@ export async function requestTTS(
     const fallbackResult = await handleFallback(finalText, env, chain, finalConfig);
     response = fallbackResult.response;
 
-    // Record fallback event for analytics
     if (fallbackResult.attemptedChain.length > 0) {
       recordBillingEvent(
         db, userId,
@@ -181,7 +225,7 @@ export async function requestTTS(
   }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 7: CacheAudio (async — never blocks the response)
+  // STEP 10: CacheAudio (async — never blocks the response)
   // ─────────────────────────────────────────────────────────
   if (response.audioUrl && !request.skipCache) {
     cacheAudio(db, {
@@ -199,7 +243,7 @@ export async function requestTTS(
   }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 8: TrackUsage (async — never blocks the response)
+  // STEP 11: TrackUsage (async — never blocks the response)
   // ─────────────────────────────────────────────────────────
   if (!response.cacheHit) {
     logUsage(db, {
@@ -219,12 +263,42 @@ export async function requestTTS(
   }
 
   // ─────────────────────────────────────────────────────────
-  // STEP 9: Check if trial billing event should fire
+  // STEP 12: Update child memory (async — never blocks)
+  //   Records emotion, increments interaction count,
+  //   awards milestones, appends phrases if engagement was high.
+  // ─────────────────────────────────────────────────────────
+  let memoryUpdated = false;
+  if (request.childId && response.audioUrl) {
+    updateChildMemory(db, request.childId, {
+      lastEmotion:      emotionState.label as any,
+      interactionCount: 1,
+    }).then(() => {
+      // Check for milestones (fire-and-forget)
+      if (childMemory) {
+        const milestone = checkMilestones({
+          ...childMemory,
+          interactionCount: childMemory.interactionCount + 1,
+        });
+        if (milestone) {
+          updateChildMemory(db, request.childId!, { milestone }).catch(() => {});
+        }
+      }
+    }).catch(() => {});
+    memoryUpdated = true;
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // STEP 13: Build ambient music payload for frontend
+  //   Frontend layers this at low volume under voice audio.
+  // ─────────────────────────────────────────────────────────
+  const ambientMusic = buildAmbientPayload(emotionState.musicVibe);
+
+  // ─────────────────────────────────────────────────────────
+  // STEP 14: Trial billing check
   // ─────────────────────────────────────────────────────────
   if (tier === 'trial' && trialRemaining !== undefined) {
     const newRemaining = trialRemaining - 1;
     if (newRemaining <= 0) {
-      // Trial just exhausted — record billing event
       recordBillingEvent(
         db, userId,
         'trial_exhausted',
@@ -238,8 +312,11 @@ export async function requestTTS(
         cacheHit:       false,
         cacheKey,
         trialRemaining: 0,
-        billingTrigger: true,   // frontend should show upgrade prompt
+        billingTrigger: true,
         fallbackUsed:   response.fallbackUsed,
+        emotion:        emotionState.label,
+        ambientMusic,
+        memoryUpdated,
       };
     }
 
@@ -249,6 +326,9 @@ export async function requestTTS(
       cacheHit:       false,
       cacheKey,
       trialRemaining: newRemaining,
+      emotion:        emotionState.label,
+      ambientMusic,
+      memoryUpdated,
     };
   }
 
@@ -258,5 +338,8 @@ export async function requestTTS(
     cacheHit:   false,
     cacheKey,
     trialRemaining,
+    emotion:    emotionState.label,
+    ambientMusic,
+    memoryUpdated,
   };
 }

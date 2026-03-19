@@ -54,6 +54,16 @@ export interface TTSRequest {
   voiceOverride?: string;      // force a specific voice ID
   skipCache?:  boolean;        // force fresh generation
   maxCostUnits?: number;       // budget cap per call
+  // ── Phase 2: Alive System ──────────────────────────────────
+  userText?:   string;         // raw child input for emotion detection
+  engagement?: {               // camera engagement signals
+    smileCount?:    number;
+    laughCount?:    number;
+    attentionLoss?: number;
+    intensity?:     number;
+    voiceDetected?: boolean;
+  };
+  behaviorTone?: string;       // from Groq cognitive layer
 }
 
 // ── Standard TTS Response ─────────────────────────────────────
@@ -74,6 +84,17 @@ export interface TTSResponse {
   error?:      string;
   fallbackUsed?: boolean;
   fallbackChain?: TTSProvider[]; // providers tried before success
+  // ── Phase 2: Alive System ──────────────────────────────────
+  emotion?:    string;          // detected EmotionLabel
+  ambientMusic?: {              // background music for frontend to layer
+    vibe:     string;
+    trackUrl: string | null;
+    volume:   number;
+    loop:     boolean;
+    fadeMs:   number;
+    label:    string;
+  };
+  memoryUpdated?: boolean;      // true if child_memory was written
 }
 
 // ── Cache Entry ───────────────────────────────────────────────

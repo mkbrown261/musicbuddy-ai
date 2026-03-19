@@ -78,6 +78,16 @@ export class TTSManagerModule implements IntentModule {
           emotion?:      TTSEmotion;
           voiceOverride?: string;
           skipCache?:    boolean;
+          // Phase 2: Alive System fields
+          userText?:     string;
+          engagement?:   {
+            smileCount?:    number;
+            laughCount?:    number;
+            attentionLoss?: number;
+            intensity?:     number;
+            voiceDetected?: boolean;
+          };
+          behaviorTone?: string;
         };
 
         if (!d.text?.trim()) {
@@ -93,6 +103,10 @@ export class TTSManagerModule implements IntentModule {
           emotion:       d.emotion ?? 'friendly',
           voiceOverride: d.voiceOverride,
           skipCache:     d.skipCache ?? false,
+          // Phase 2 fields
+          userText:      d.userText,
+          engagement:    d.engagement,
+          behaviorTone:  d.behaviorTone,
         };
 
         const response: TTSResponse = await requestTTS(request, env, db);
