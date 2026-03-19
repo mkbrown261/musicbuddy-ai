@@ -226,7 +226,27 @@ app.get('/prefs', async (c) => {
 
   const userId = c.req.query('userId') ?? 'demo'
   const prefs  = await getVoicePreferences(db, userId)
-  return c.json({ success: true, userId, prefs: prefs ?? { default: true } })
+
+  // Normalize to what the frontend VOICE_PERSONALITY module expects
+  if (prefs) {
+    return c.json({
+      success: true, userId,
+      data: {
+        voiceGender:     prefs.voiceGender     ?? 'female',
+        voiceCharacter:  prefs.voiceCharacter  ?? 'luna',
+        voiceStyle:      prefs.voiceStyle      ?? 'default',
+        stability:       prefs.stability       ?? 0.35,
+        styleBoost:      prefs.styleBoost      ?? 0.75,
+        similarity:      prefs.similarity      ?? 0.60,
+        groqPersonality: prefs.groqPersonality ?? true,
+        singingMode:     prefs.singingMode     ?? false,
+        speed:           prefs.speed           ?? 0.95,
+        preferredProvider: prefs.preferredProvider,
+      },
+      prefs,
+    })
+  }
+  return c.json({ success: true, userId, data: null, prefs: null })
 })
 
 // ════════════════════════════════════════════════════════════
@@ -254,12 +274,24 @@ app.put('/prefs', async (c) => {
   }
 
   const userId = body.userId ?? 'demo'
-  const { preferredProvider, openaiVoice, elevenlabsVoice, pollyVoice,
-          speed, defaultEmotion, singingMode } = body
+  const {
+    preferredProvider, openaiVoice, elevenlabsVoice, pollyVoice,
+    speed, defaultEmotion, singingMode,
+    // Phase 2: full VOICE_PERSONALITY fields from frontend
+    voiceGender, voiceStyle, stability, styleBoost, similarity,
+    groqPersonality, voiceCharacter,
+  } = body
 
   await saveVoicePreferences(db, userId, {
     preferredProvider, openaiVoice, elevenlabsVoice, pollyVoice,
     speed, defaultEmotion, singingMode,
+    voiceGender,
+    voiceCharacter,
+    voiceStyle,
+    stability:       stability   != null ? parseFloat(stability)   : undefined,
+    styleBoost:      styleBoost  != null ? parseFloat(styleBoost)  : undefined,
+    similarity:      similarity  != null ? parseFloat(similarity)  : undefined,
+    groqPersonality: groqPersonality != null ? Boolean(groqPersonality) : undefined,
   })
 
   return c.json({ success: true, userId, message: 'Voice preferences saved' })

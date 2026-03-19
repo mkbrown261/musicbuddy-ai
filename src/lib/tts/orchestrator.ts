@@ -130,6 +130,19 @@ export async function requestTTS(
   const { tier, voiceConfig, trialRemaining } = resolution;
 
   // ─────────────────────────────────────────────────────────
+  // STEP 3b: Apply user's saved expressiveness settings
+  //   If the user has saved stability/styleBoost/similarity
+  //   in their preferences, apply them to the voice config
+  //   (these override tier defaults but are still overridden
+  //    by emotion-specific settings in STEP 4).
+  // ─────────────────────────────────────────────────────────
+  if (voiceConfig.provider === 'elevenlabs' && userPrefs) {
+    if (userPrefs.stability  != null) voiceConfig.stability  = userPrefs.stability;
+    if (userPrefs.styleBoost != null) voiceConfig.styleBoost = userPrefs.styleBoost;
+    if (userPrefs.similarity != null) voiceConfig.similarity = userPrefs.similarity;
+  }
+
+  // ─────────────────────────────────────────────────────────
   // STEP 4: Apply emotion settings to voice config
   //   Overrides tier default stability/similarity/styleBoost
   //   with emotion-specific expressiveness values.

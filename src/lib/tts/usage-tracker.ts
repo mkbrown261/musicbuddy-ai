@@ -224,6 +224,13 @@ export async function getVoicePreferences(
   defaultEmotion: string;
   singingMode: boolean;
   voiceGender: 'female' | 'male';
+  // Phase 2: character personality persistence
+  voiceCharacter: string;
+  voiceStyle: string;
+  stability: number;
+  styleBoost: number;
+  similarity: number;
+  groqPersonality: boolean;
 } | null> {
   try {
     const row = await db.prepare(
@@ -239,6 +246,13 @@ export async function getVoicePreferences(
       defaultEmotion:    row.default_emotion,
       singingMode:       row.singing_mode === 1,
       voiceGender:       (row.voice_gender === 'male' ? 'male' : 'female') as 'female' | 'male',
+      // Phase 2
+      voiceCharacter:    row.voice_character ?? 'luna',
+      voiceStyle:        row.voice_style     ?? 'default',
+      stability:         row.stability       ?? 0.35,
+      styleBoost:        row.style_boost     ?? 0.75,
+      similarity:        row.similarity      ?? 0.60,
+      groqPersonality:   row.groq_personality !== 0,
     };
   } catch { return null; }
 }
@@ -256,14 +270,23 @@ export async function saveVoicePreferences(
     defaultEmotion?: string;
     singingMode?: boolean;
     voiceGender?: 'female' | 'male';
+    // Phase 2
+    voiceCharacter?: string;
+    voiceStyle?: string;
+    stability?: number;
+    styleBoost?: number;
+    similarity?: number;
+    groqPersonality?: boolean;
   }
 ): Promise<void> {
   try {
     await db.prepare(
       `INSERT INTO tts_voice_preferences
          (user_id, preferred_provider, openai_voice, elevenlabs_voice, polly_voice,
-          speed, default_emotion, singing_mode, voice_gender, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          speed, default_emotion, singing_mode, voice_gender,
+          voice_character, voice_style, stability, style_boost, similarity, groq_personality,
+          updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(user_id) DO UPDATE SET
          preferred_provider = COALESCE(excluded.preferred_provider, preferred_provider),
          openai_voice       = COALESCE(excluded.openai_voice, openai_voice),
@@ -273,6 +296,12 @@ export async function saveVoicePreferences(
          default_emotion    = COALESCE(excluded.default_emotion, default_emotion),
          singing_mode       = COALESCE(excluded.singing_mode, singing_mode),
          voice_gender       = COALESCE(excluded.voice_gender, voice_gender),
+         voice_character    = COALESCE(excluded.voice_character, voice_character),
+         voice_style        = COALESCE(excluded.voice_style, voice_style),
+         stability          = COALESCE(excluded.stability, stability),
+         style_boost        = COALESCE(excluded.style_boost, style_boost),
+         similarity         = COALESCE(excluded.similarity, similarity),
+         groq_personality   = COALESCE(excluded.groq_personality, groq_personality),
          updated_at         = CURRENT_TIMESTAMP`
     ).bind(
       userId,
@@ -283,7 +312,14 @@ export async function saveVoicePreferences(
       prefs.speed ?? null,
       prefs.defaultEmotion ?? null,
       prefs.singingMode != null ? (prefs.singingMode ? 1 : 0) : null,
-      prefs.voiceGender ?? null
+      prefs.voiceGender ?? null,
+      // Phase 2
+      prefs.voiceCharacter ?? null,
+      prefs.voiceStyle ?? null,
+      prefs.stability ?? null,
+      prefs.styleBoost ?? null,
+      prefs.similarity ?? null,
+      prefs.groqPersonality != null ? (prefs.groqPersonality ? 1 : 0) : null,
     ).run();
   } catch (e) {
     console.error('[UsageTracker] saveVoicePreferences error:', e);

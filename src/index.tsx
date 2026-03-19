@@ -2827,6 +2827,12 @@ const REWARDS = {
   showLevelUp() {
     const modal = document.getElementById('levelUpModal');
     if (!modal) return;
+    // Stop any currently playing TTS before announcing level up
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (window._activeTTSAudio) {
+      try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+      window._activeTTSAudio = null;
+    }
     const emojis = ['⭐','🌟','💫','🏆','👑','🎯','🎪','🎭','🎨','🚀'];
     const names = ['Music Explorer','Rhythm Rider','Beat Maker','Melody Maker','Harmony Hero',
                    'Song Superstar','Groove Master','Music Wizard','Sound Champion','Legend'];
@@ -3185,6 +3191,10 @@ const MINIGAME = {
     this._currentPhrase = phrase;
     // Cancel any previous TTS before speaking the phrase
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (window._activeTTSAudio) {
+      try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+      window._activeTTSAudio = null;
+    }
     setTimeout(async () => {
       if (!MINIGAME.active) return; // closed before timeout fired
       document.getElementById('mgPhrase').textContent = phrase;
@@ -3245,6 +3255,10 @@ const MINIGAME = {
       </div>\`;
     // Cancel any previous speech before speaking the instruction
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (window._activeTTSAudio) {
+      try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+      window._activeTTSAudio = null;
+    }
     speakText('Clap ' + target + ' times!', 'excited');
     // Start voice listener after a delay so it doesn't catch our own speech
     if (hasVoice) {
@@ -3287,9 +3301,11 @@ const MINIGAME = {
         <div class="text-xs text-gray-400" id="mgRhythmStatus">Press play to hear it first</div>
       </div>\`;
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (window._activeTTSAudio) {
+      try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+      window._activeTTSAudio = null;
+    }
   },
-
-  voiceRhythm() {
     if (!MINIGAME.active) return;
     const micStatus = document.getElementById('mgMicStatus');
     if (micStatus) micStatus.textContent = '🎤 Say "done" when you finish tapping!';
@@ -3341,8 +3357,12 @@ const MINIGAME = {
 
   playerSay(result) {
     if (!this.active) return; // guard: ignore if already closed
-    // Cancel any overlapping TTS first
+    // Cancel any overlapping TTS first (both browser and server TTS)
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (window._activeTTSAudio) {
+      try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+      window._activeTTSAudio = null;
+    }
     // Stop any active voice listener
     if (VOICE_INPUT && VOICE_INPUT._recognition) {
       try { VOICE_INPUT._recognition.abort(); } catch(e) {}
@@ -3381,15 +3401,24 @@ const MINIGAME = {
   },
 
   close() {
-    // 1. Hide the modal
+    // 1. Hide the modal — must set BOTH style.display AND remove class
+    //    because .style.display='flex' (set on open) overrides Tailwind .hidden
     const modal = document.getElementById('miniGameModal');
-    if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
+    if (modal) {
+      modal.style.display = 'none';
+      modal.classList.add('hidden');
+    }
     // 2. Stop all state
     this.active = false;
     this.type = null;
     clearInterval(this.beatTimer);
     // 3. Cancel any in-flight TTS (stop overlapping voices)
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    // Also stop any ElevenLabs / server TTS audio
+    if (window._activeTTSAudio) {
+      try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+      window._activeTTSAudio = null;
+    }
     // 4. Stop voice recognition listener
     if (VOICE_INPUT && VOICE_INPUT._recognition) {
       try { VOICE_INPUT._recognition.abort(); } catch(e) {}
@@ -3410,9 +3439,14 @@ function closeMiniGame() {
 function startMiniGame(type) {
   // Cancel any currently playing TTS and voice listener before starting game
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  if (window._activeTTSAudio) {
+    try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+    window._activeTTSAudio = null;
+  }
   if (VOICE_INPUT && VOICE_INPUT._recognition) {
     try { VOICE_INPUT._recognition.abort(); } catch(e) {}
     VOICE_INPUT._listening = false;
+    VOICE_INPUT._recognition = null;
   }
   // Mini-games are FREE — no session required, just start playing!
   if (!STATE.selectedChild) STATE.selectedChild = { name: 'friend', age: 5 };
@@ -3426,6 +3460,16 @@ async function startCallAndResponse() {
   AUDIO.init(); AUDIO.resume();
   // Cancel any currently playing TTS before starting
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  if (window._activeTTSAudio) {
+    try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+    window._activeTTSAudio = null;
+  }
+  // Abort any active voice recognition
+  if (VOICE_INPUT && VOICE_INPUT._recognition) {
+    try { VOICE_INPUT._recognition.abort(); } catch(e) {}
+    VOICE_INPUT._listening = false;
+    VOICE_INPUT._recognition = null;
+  }
 
   const name = STATE.selectedChild?.name || 'friend';
   const phrases = [
@@ -3538,6 +3582,10 @@ function carListenForResponse(expected) {
 function carGotIt() {
   if (!MINIGAME.active) return;
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  if (window._activeTTSAudio) {
+    try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+    window._activeTTSAudio = null;
+  }
   if (VOICE_INPUT && VOICE_INPUT._recognition) {
     try { VOICE_INPUT._recognition.abort(); } catch(e) {}
     VOICE_INPUT._listening = false;
@@ -4280,6 +4328,15 @@ function playAudio(url, title, style, duration) {
   
   updateStateUI('sing', 'playing');
 
+  // ── AI Sing-Along: speak lyrics over instrumental ─────────
+  // 3 seconds after song starts, AI sings the first lyric line.
+  // This gives the child the feel of the AI performing with them.
+  setTimeout(function() {
+    if (STATE.isPlaying) {
+      singLyricsWithSong(title, style, duration || 20);
+    }
+  }, 3000);
+
   // Trigger beat-synced hype oscillators while playing
   if (STATE.hypeEnabled && STATE.sessionActive) {
     const bpm = STATE.tempo === 'fast' ? 120 : STATE.tempo === 'slow' ? 80 : 100;
@@ -4750,7 +4807,15 @@ const VOICE_INPUT = {
 
   // Listen once for child response (e.g. in games or after Groq asks a question)
   listenForResponse(timeoutMs = 8000) {
-    if (!VOICE_INPUT.isSupported() || VOICE_INPUT._listening) return;
+    if (!VOICE_INPUT.isSupported()) return;
+
+    // Abort any existing recognition first
+    if (VOICE_INPUT._recognition) {
+      try { VOICE_INPUT._recognition.abort(); } catch(e) {}
+      VOICE_INPUT._recognition = null;
+      VOICE_INPUT._listening = false;
+    }
+    if (VOICE_INPUT._listening) return;
 
     const r = VOICE_INPUT.create();
     if (!r) return;
@@ -4784,7 +4849,7 @@ const VOICE_INPUT = {
     r.onerror = () => { VOICE_INPUT._listening = false; };
     r.onend   = () => { VOICE_INPUT._listening = false; };
 
-    r.start();
+    try { r.start(); } catch(e) { VOICE_INPUT._listening = false; return; }
     setTimeout(() => {
       try { r.stop(); } catch(e) {}
       VOICE_INPUT._listening = false;
@@ -4795,41 +4860,70 @@ const VOICE_INPUT = {
   listenFor(expectedPhrase, timeoutMs, onSuccess, onFail) {
     if (!VOICE_INPUT.isSupported()) { if (onFail) onFail('not_supported'); return; }
 
+    // Abort any existing recognition before starting a new one
+    if (VOICE_INPUT._recognition) {
+      try { VOICE_INPUT._recognition.abort(); } catch(e) {}
+      VOICE_INPUT._recognition = null;
+    }
+    VOICE_INPUT._listening = false;
+
     const r = VOICE_INPUT.create();
     if (!r) { if (onFail) onFail('no_recognition'); return; }
 
     VOICE_INPUT._listening = true;
     VOICE_INPUT._recognition = r;
 
-    const micIcon = document.getElementById('mgMicStatus');
+    // Track whether we already called a callback (prevent double-fire)
+    let _settled = false;
+
+    const micIcon = document.getElementById('mgMicStatus') || document.getElementById('carMicStatus');
     if (micIcon) micIcon.textContent = '🎤 Listening...';
 
     r.onresult = (event) => {
+      if (_settled) return;
       const transcript = event.results[0]?.[0]?.transcript?.toLowerCase().trim() || '';
       VOICE_INPUT._listening = false;
       const expected = expectedPhrase.toLowerCase();
       // Fuzzy match: check if any key word present
-      const words = expected.split(/\\s+/);
+      const words = expected.split(/\s+/);
       const matched = words.some(w => w.length > 2 && transcript.includes(w));
       if (matched || transcript.includes(expected)) {
+        _settled = true;
         if (onSuccess) onSuccess(transcript);
       } else {
+        _settled = true;
         if (onFail) onFail(transcript);
       }
     };
 
-    r.onerror = () => { VOICE_INPUT._listening = false; if (onFail) onFail('error'); };
+    r.onerror = (e) => {
+      if (_settled) return;
+      VOICE_INPUT._listening = false;
+      // Don't fire onFail for 'no-speech' — just reset button silently
+      if (e.error !== 'no-speech') {
+        _settled = true;
+        if (onFail) onFail('error');
+      }
+    };
     r.onend   = () => {
       VOICE_INPUT._listening = false;
       if (micIcon) micIcon.textContent = '';
     };
 
-    r.start();
+    try { r.start(); } catch(e) {
+      VOICE_INPUT._listening = false;
+      if (!_settled) { _settled = true; if (onFail) onFail('error'); }
+      return;
+    }
+
     setTimeout(() => {
       try { r.stop(); } catch(e) {}
       VOICE_INPUT._listening = false;
-      // If no result yet, treat as timeout
-      if (onFail) onFail('timeout');
+      // Only fire timeout if no result yet
+      if (!_settled) {
+        _settled = true;
+        if (onFail) onFail('timeout');
+      }
     }, timeoutMs);
   },
 };
@@ -4932,6 +5026,14 @@ async function speakText(text, emotionHint) {
     });
 
     if (r.success && r.data?.audioUrl) {
+      // ── Stop any currently-playing server TTS to prevent overlap ──
+      if (window._activeTTSAudio) {
+        try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+        window._activeTTSAudio = null;
+      }
+      // Cancel any browser speech synthesis too
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
       // ── Trigger ambient background music ─────────────────────
       if (r.data.ambientMusic && r.data.ambientMusic.trackUrl) {
         AMBIENT_MUSIC.play(r.data.ambientMusic);
@@ -4961,16 +5063,18 @@ async function speakText(text, emotionHint) {
 
       return new Promise((resolve) => {
         const ttsAudio = new Audio(r.data.audioUrl);
+        window._activeTTSAudio = ttsAudio;
         ttsAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
         ttsAudio.onended = () => {
+          if (window._activeTTSAudio === ttsAudio) window._activeTTSAudio = null;
           if (STATE.isPlaying && bgAudio) {
             bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
           }
           AMBIENT_MUSIC.fadeOut(2000);
           resolve();
         };
-        ttsAudio.onerror = () => resolve();
-        ttsAudio.play().catch(() => resolve());
+        ttsAudio.onerror = () => { if (window._activeTTSAudio === ttsAudio) window._activeTTSAudio = null; resolve(); };
+        ttsAudio.play().catch(() => { if (window._activeTTSAudio === ttsAudio) window._activeTTSAudio = null; resolve(); });
       });
     }
     // Fall through to Web Speech API — still play ambient
@@ -6324,7 +6428,9 @@ async function saveVoiceSettings() {
   VOICE_PERSONALITY.groqEnabled = togEl ? togEl.checked : true;
   try {
     const r = await api('PUT', '/tts/prefs', {
+      userId:          AUTH.user?.id ? String(AUTH.user.id) : 'demo',
       voiceGender:     VOICE_PERSONALITY.gender,
+      voiceCharacter:  VOICE_PERSONALITY.character,
       voiceStyle:      VOICE_PERSONALITY.style,
       stability:       VOICE_PERSONALITY.stability,
       styleBoost:      VOICE_PERSONALITY.styleBoost,
@@ -6361,10 +6467,12 @@ async function saveVoiceSettings() {
 
 async function loadVoiceSettings() {
   try {
-    const r = await api('GET', '/tts/prefs');
+    const uid = AUTH.user?.id ? String(AUTH.user.id) : 'demo';
+    const r = await api('GET', '/tts/prefs?userId=' + encodeURIComponent(uid));
     if (r.success !== false && r.data) {
       const d = r.data;
       if (d.voiceGender)           VOICE_PERSONALITY.gender      = d.voiceGender;
+      if (d.voiceCharacter)        VOICE_PERSONALITY.character   = d.voiceCharacter;
       if (d.voiceStyle)            VOICE_PERSONALITY.style       = d.voiceStyle;
       if (d.stability  != null)    VOICE_PERSONALITY.stability   = d.stability;
       if (d.styleBoost != null)    VOICE_PERSONALITY.styleBoost  = d.styleBoost;
@@ -6417,6 +6525,101 @@ function toneToEmotion(tone) {
     gentle: 'calm', curious: 'friendly',
   };
   return map[tone] || 'friendly';
+}
+
+// ============================================================
+// SING-ALONG ENGINE — AI sings lyrics over the instrumental
+// ============================================================
+// Called 3s after a song starts. Generates lyric lines for the
+// current song style/title and TTS-speaks them (singing emotion)
+// timed to the song. This is what makes MusicBuddy truly sing
+// WITH the child — not just hum — actual words are spoken.
+//
+// Lyric lines are spaced out across the song duration so the AI
+// sounds like it's performing. Volume of instrumentals duck a
+// little while AI speaks.
+//
+// Uses EXPRESSOR.generateLyrics() for local generation,
+// no extra API cost.
+// ============================================================
+var _singTimer = null;
+
+function singLyricsWithSong(songTitle, style, durationSecs) {
+  // Only sing during an active session
+  if (!STATE.sessionActive || !STATE.isPlaying) return;
+
+  // Stop any previous sing-along timer
+  if (_singTimer) { clearTimeout(_singTimer); _singTimer = null; }
+
+  var name = STATE.selectedChild ? STATE.selectedChild.name : 'friend';
+  var age  = STATE.selectedChild ? (STATE.selectedChild.age || 5) : 5;
+
+  // Get lyrics for this song (use creator lyrics if available, else generate)
+  var lyrics = '';
+  if (STATE.currentSnippet && STATE.currentSnippet.lyrics) {
+    lyrics = STATE.currentSnippet.lyrics;
+  } else {
+    // Generate appropriate lyrics for the style
+    try { lyrics = EXPRESSOR.generateLyrics(songTitle || 'Fun Song', style || 'playful', name, 6); }
+    catch(e) { lyrics = _defaultLyrics(style, name); }
+  }
+
+  // Split into singable lines
+  var lines = lyrics.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 2; });
+  if (lines.length === 0) lines = _defaultLyrics(style, name).split('\n');
+
+  // Show lyrics display
+  var lyricsEl = document.getElementById('singAlongDisplay');
+  if (lyricsEl) { lyricsEl.classList.remove('hidden'); }
+
+  // Space lines across the song: start at 3s, end at (duration - 5)s
+  var totalSingTime = Math.max(8, (durationSecs - 8)) * 1000;
+  var lineCount     = Math.min(lines.length, 4);   // max 4 lines per song
+  var lineSpacing   = Math.floor(totalSingTime / (lineCount + 1));
+
+  // Schedule each lyric line
+  for (var i = 0; i < lineCount; i++) {
+    (function(idx, delay, line) {
+      _singTimer = setTimeout(function() {
+        if (!STATE.isPlaying) return;  // song stopped — don't sing
+        // Update display
+        if (lyricsEl) {
+          lyricsEl.innerHTML = '<span style="font-size:1.2em">🎵</span> ' + line;
+          lyricsEl.style.opacity = '1';
+        }
+        // Speak the lyric in singing voice (lower volume than main song)
+        var mainAudio = document.getElementById('audioPlayer');
+        var prevVol   = mainAudio ? mainAudio.volume : 0.7;
+        if (mainAudio) mainAudio.volume = Math.max(0.15, prevVol * 0.4);
+        speakText(line, 'singing').then(function() {
+          if (mainAudio && STATE.isPlaying) mainAudio.volume = prevVol;
+        }).catch(function() {
+          if (mainAudio && STATE.isPlaying) mainAudio.volume = prevVol;
+        });
+      }, delay);
+    })(i, (i + 1) * lineSpacing, lines[i % lines.length]);
+  }
+
+  // Hide lyrics 3s before song ends
+  var hideDelay = Math.max(1000, (durationSecs - 3) * 1000);
+  setTimeout(function() {
+    if (lyricsEl) {
+      lyricsEl.style.opacity = '0';
+      setTimeout(function() { if (lyricsEl) lyricsEl.classList.add('hidden'); }, 500);
+    }
+  }, hideDelay);
+}
+
+function _defaultLyrics(style, name) {
+  var styles = {
+    playful:   'Hey ' + name + ', let\'s play today!\nJump and dance and shout hooray!\nLa la la, come sing with me!\nWe\'re happy as can be!',
+    energetic: 'Go go go, feel the beat!\nStamp your feet and feel the heat!\nYou can do it, ' + name + '!\nMove and groove all day!',
+    calm:      'Close your eyes, ' + name + ', and breathe...\nSoft and slow, just like the leaves.\nLa la la, sweet and low.\nGentle music, soft and slow.',
+    lullaby:   'Sleep tight, sweet ' + name + ', goodnight.\nStars are twinkling, shining bright.\nDream of songs and happy days.\nDrifting off in gentle haze.',
+    educational: 'A B C, come learn with me!\nNumbers, letters, one two three!\nWe\'re so smart, ' + name + ' and me!\nLearning\'s fun as it can be!',
+    adventure: name + ', let\'s go explore!\nEvery day there\'s something more!\nAdventures wait, let\'s sing along!\nWe\'re brave and happy, we\'re so strong!',
+  };
+  return styles[style] || styles.playful;
 }
 
 // ============================================================
