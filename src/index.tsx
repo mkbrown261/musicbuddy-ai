@@ -4355,7 +4355,7 @@ const BILLING = {
       const badgeHtml = plan.badge ? '<span class="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full font-bold">' + plan.badge + '</span>' : '';
       const activeBadge = isActive ? '<span class="text-xs bg-green-900 text-green-300 px-2 py-0.5 rounded-full font-bold">Current</span>' : '';
       const preview = plan.features.slice(0,2).join(' • ');
-      return '<div onclick="BILLING.selectPlan('' + plan.id + '')"' +
+      return '<div onclick="BILLING.selectPlan(this.dataset.plan)" data-plan="' + plan.id + '"' +
         ' class="glass-light rounded-xl p-4 cursor-pointer border-2 transition"' +
         ' id="billingPlanCard_' + plan.id + '"' +
         ' style="border-color:' + borderColor + '">' +
@@ -4558,7 +4558,7 @@ const BILLING = {
       const preview = plan.features.slice(0,2).join(' • ');
       const actionBtn = isActive
         ? '<span class="text-xs bg-green-900 text-green-300 px-2 py-0.5 rounded-full font-bold">Active</span>'
-        : (plan.id !== 'free' ? '<button onclick="BILLING.open(\'' + plan.id + '\')" class="btn-primary text-xs px-3">Select</button>' : '');
+        : (plan.id !== 'free' ? '<button onclick="BILLING.open(this.dataset.plan)" data-plan="' + plan.id + '" class="btn-primary text-xs px-3">Select</button>' : '');
       return '<div class="flex items-center gap-3 glass-light p-3 rounded-xl">' +
         '<span class="text-xl">' + plan.emoji + '</span>' +
         '<div class="flex-1">' +
