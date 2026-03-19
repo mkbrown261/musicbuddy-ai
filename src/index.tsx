@@ -854,21 +854,34 @@ function getMainHTML(): string {
         <div class="space-y-4">
           <div>
             <label class="text-sm font-bold text-gray-300 block mb-2">
-              🎵 Suno API Key <span class="text-xs text-gray-500">(for AI music generation)</span>
+              🎵 Suno API Key <span class="text-xs text-gray-500">(private access only)</span>
             </label>
             <input type="password" id="sunoKeyInput" placeholder="sk-suno-..." class="text-sm" />
-            <p class="text-xs text-gray-500 mt-1">Without a key, demo audio is used. Get yours at sunoapi.org</p>
+            <p class="text-xs text-gray-500 mt-1">Suno API is not publicly open. Requires private access arrangement. <a href="https://sunoapi.org" target="_blank" class="text-blue-400">sunoapi.org</a></p>
           </div>
           <div>
             <label class="text-sm font-bold text-gray-300 block mb-2">
-              🤖 OpenAI API Key <span class="text-xs text-gray-500">(for TTS speech)</span>
+              🤖 Replicate API Key <span class="text-xs text-green-400 font-bold">(recommended — Meta MusicGen)</span>
+            </label>
+            <input type="password" id="replicateKeyInput" placeholder="r8_..." class="text-sm" />
+            <p class="text-xs text-gray-500 mt-1">Best alternative! Meta MusicGen via Replicate. ~$0.004/req. Get yours at <a href="https://replicate.com" target="_blank" class="text-blue-400">replicate.com</a></p>
+          </div>
+          <div>
+            <label class="text-sm font-bold text-gray-300 block mb-2">
+              🗣️ OpenAI API Key <span class="text-xs text-gray-500">(for high-quality TTS speech)</span>
             </label>
             <input type="password" id="openaiKeyInput" placeholder="sk-..." class="text-sm" />
-            <p class="text-xs text-gray-500 mt-1">Used for TTS voice generation (natural child-directed speech)</p>
+            <p class="text-xs text-gray-500 mt-1">OpenAI TTS (shimmer voice). Falls back to browser Web Speech API for free. Get yours at <a href="https://platform.openai.com" target="_blank" class="text-blue-400">platform.openai.com</a></p>
           </div>
           <button onclick="saveApiKeys()" class="btn-primary w-full">
-            <i class="fas fa-save mr-2"></i> Save API Keys (Stored Locally)
+            <i class="fas fa-save mr-2"></i> Validate & Save API Keys
           </button>
+          <div class="glass-light p-4 rounded-xl mt-2">
+            <p class="text-xs text-gray-400 font-bold mb-2">⚡ To persist keys for all users (production):</p>
+            <code class="text-xs text-green-300 block">npx wrangler secret put REPLICATE_API_KEY</code>
+            <code class="text-xs text-green-300 block">npx wrangler secret put OPENAI_API_KEY</code>
+            <code class="text-xs text-gray-500 block mt-1"># Then redeploy: npm run build && npx wrangler pages deploy dist --project-name musicbuddy-ai</code>
+          </div>
         </div>
       </div>
 
@@ -1503,9 +1516,13 @@ function onAudioEnded() {
   addCycleEvent('💬', 'talk', 'Post-song response');
   STATE.lastInteraction = 'talk';
   
-  // Auto-trigger next if still active
+  // Auto-trigger next if still active (5s cooldown to feel natural, not a rapid loop)
   if (STATE.sessionActive && STATE.mode === 'auto') {
-    setTimeout(() => triggerInteraction('auto_after_song'), 4000);
+    setTimeout(() => {
+      if (STATE.sessionActive && STATE.mode === 'auto' && !STATE.isPlaying) {
+        triggerInteraction('auto_after_song');
+      }
+    }, 5000);
   }
   
   // Update engagement display
@@ -1671,16 +1688,46 @@ async function detectBackground() {
 }
 
 // ── TTS / Chat ────────────────────────────────────────────────
-function speakText(text) {
+// speakText: tries OpenAI TTS first (if key configured), falls back to Web Speech API
+async function speakText(text) {
+  const openaiKey = localStorage.getItem('mb_openai_key');
+  
+  // Try OpenAI TTS if key available and session active
+  if (openaiKey && STATE.currentSession && STATE.selectedChild) {
+    try {
+      const r = await api('POST', '/music/tts', {
+        child_id: STATE.selectedChild.id,
+        session_id: STATE.currentSession.id,
+        text: text,
+        trigger: 'speak'
+      });
+      if (r.success && r.data?.audio_url && !r.data.demo_mode) {
+        const ttsAudio = new Audio(r.data.audio_url);
+        ttsAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+        await ttsAudio.play().catch(() => {});
+        return; // Successfully played TTS
+      }
+    } catch (e) {
+      // Fall through to Web Speech API
+    }
+  }
+  
+  // Fallback: Web Speech API (built into browser, zero cost, works everywhere)
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.rate = parseFloat(document.getElementById('ttsSpeed')?.value || 0.9);
     utter.pitch = 1.2;
     utter.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
-    // Try to pick a friendly voice
+    // Try to pick a warm, friendly voice
     const voices = window.speechSynthesis.getVoices();
-    const friendly = voices.find(v => v.name.includes('Samantha') || v.name.includes('Google UK') || v.name.includes('Female'));
+    const friendly = voices.find(v => 
+      v.name.includes('Samantha') || 
+      v.name.includes('Karen') ||
+      v.name.includes('Moira') ||
+      v.name.includes('Google UK English Female') ||
+      (v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+    ) || voices.find(v => v.lang.startsWith('en'));
     if (friendly) utter.voice = friendly;
     window.speechSynthesis.speak(utter);
   }
@@ -1990,12 +2037,34 @@ function playLibrarySnippet(url, title, style, duration) {
 }
 
 // ── Settings / System Info ────────────────────────────────────
-function saveApiKeys() {
-  const suno = document.getElementById('sunoKeyInput').value;
-  const openai = document.getElementById('openaiKeyInput').value;
+async function saveApiKeys() {
+  const suno = document.getElementById('sunoKeyInput').value.trim();
+  const openai = document.getElementById('openaiKeyInput').value.trim();
+  const replicate = document.getElementById('replicateKeyInput')?.value.trim() || '';
+  
+  // Save locally for display purposes
   if (suno) localStorage.setItem('mb_suno_key', suno);
   if (openai) localStorage.setItem('mb_openai_key', openai);
-  showToast('API keys saved locally. Configure secrets server-side for production.', '🔑', 'success');
+  if (replicate) localStorage.setItem('mb_replicate_key', replicate);
+  
+  // Validate keys server-side
+  if (openai || replicate) {
+    showToast('Validating API keys...', '🔑');
+    const r = await api('POST', '/music/keys/validate', {
+      suno_key: suno || undefined,
+      replicate_key: replicate || undefined,
+      openai_key: openai || undefined
+    });
+    if (r.success) {
+      const results = r.data.validation;
+      const msgs = Object.entries(results).map(([k,v]) => k + ': ' + v).join(', ');
+      const provider = r.data.active_provider;
+      showToast('Active: ' + provider + '. ' + (msgs || 'Keys validated.'), '✅', 'success');
+    }
+  }
+  
+  // Show setup instructions
+  showToast('⚡ To persist for all users: run wrangler secret commands — see Settings for details', '🔑', 'info');
 }
 
 async function loadSystemInfo() {

@@ -33,9 +33,9 @@ VALUES
   (3, 'screen_time', '{"maxMinutes": 20, "alertAt": 15}', 1),
   (3, 'volume_limit', '{"maxVolume": 60}', 1);
 
--- Initialize adaptive profiles
+-- Initialize adaptive profiles (JSON objects {style: score} for weighted learning)
 INSERT OR IGNORE INTO adaptive_profiles (child_id, favorite_styles, favorite_tempos, avg_engagement_score)
 VALUES
-  (1, '["playful","upbeat"]', '["medium","fast"]', 0.0),
-  (2, '["upbeat","energetic"]', '["fast","medium"]', 0.0),
-  (3, '["lullaby","calm"]', '["slow","medium"]', 0.0);
+  (1, '{"playful":2.0,"upbeat":1.0}', '{"medium":2.0,"fast":1.0}', 0.0),
+  (2, '{"upbeat":2.0,"energetic":1.0}', '{"fast":2.0,"medium":1.0}', 0.0),
+  (3, '{"lullaby":2.0,"calm":1.0}', '{"slow":2.0,"medium":1.0}', 0.0);
