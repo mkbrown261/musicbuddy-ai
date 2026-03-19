@@ -5989,24 +5989,21 @@ async function tryRestoreSession() {
 // 3-Stage Pipeline: Groq Rewrite → Voice Select → ElevenLabs
 // ============================================================
 const VOICE_PERSONALITY = {
-  gender:      'female' as 'female' | 'male',
-  style:       'default' as 'default' | 'playful' | 'soothing' | 'energetic',
+  gender:      'female',
+  style:       'default',
   stability:   0.35,
   styleBoost:  0.75,
   similarity:  0.60,
   groqEnabled: true,
   _saved:      false,
-
-  // Voice name map for UI display
   VOICE_NAMES: {
     female: { default: 'Rachel (Warm Host)', playful: 'Matilda (Playful)', soothing: 'Bella (Soothing)', energetic: 'Elli (Energetic)' },
     male:   { default: 'Charlie (Narrator)', playful: 'Will (Playful)',    soothing: 'Callum (Calm)',    energetic: 'Josh (Energetic)' },
-  } as Record<string, Record<string, string>>,
+  },
 };
 
-function setVoiceGender(g: 'female' | 'male') {
+function setVoiceGender(g) {
   VOICE_PERSONALITY.gender = g;
-  // Update button visuals
   const active   = 'border-color:#ff6b9d;background:rgba(255,107,157,0.15)';
   const inactive = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
   const femBtn   = document.getElementById('voiceGenderFemale');
@@ -6016,120 +6013,103 @@ function setVoiceGender(g: 'female' | 'male') {
   updateExpressivenessPreview();
 }
 
-function setVoiceStyle(s: 'default' | 'playful' | 'soothing' | 'energetic') {
+function setVoiceStyle(s) {
   VOICE_PERSONALITY.style = s;
-  // Update style button visuals
-  ['default','playful','energetic','soothing'].forEach(id => {
+  ['default','playful','energetic','soothing'].forEach(function(id) {
     const btn = document.getElementById('vstyle-' + id);
     if (!btn) return;
     btn.style.cssText = (id === s)
       ? 'border-color:#ff6b9d;background:rgba(255,107,157,0.15)'
       : 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
   });
-
-  // Adjust sliders to preset values for the style
-  const presets: Record<string, {stability:number; style:number; similarity:number}> = {
+  const presets = {
     default:   { stability: 0.35, style: 0.75, similarity: 0.60 },
     playful:   { stability: 0.30, style: 0.90, similarity: 0.60 },
     energetic: { stability: 0.28, style: 0.95, similarity: 0.65 },
     soothing:  { stability: 0.65, style: 0.35, similarity: 0.55 },
   };
-  const p = presets[s] ?? presets.default;
+  const p = presets[s] || presets.default;
   VOICE_PERSONALITY.stability  = p.stability;
   VOICE_PERSONALITY.styleBoost = p.style;
   VOICE_PERSONALITY.similarity = p.similarity;
-
-  const stab = document.getElementById('elStability')  as HTMLInputElement;
-  const styl = document.getElementById('elStyleBoost') as HTMLInputElement;
-  const sim  = document.getElementById('elSimilarity') as HTMLInputElement;
-  if (stab) { stab.value = String(p.stability);  document.getElementById('stabilityVal')!.textContent  = p.stability.toFixed(2); }
-  if (styl) { styl.value = String(p.style);      document.getElementById('styleBoostVal')!.textContent = p.style.toFixed(2); }
-  if (sim)  { sim.value  = String(p.similarity); document.getElementById('similarityVal')!.textContent = p.similarity.toFixed(2); }
-
+  const stab = document.getElementById('elStability');
+  const styl = document.getElementById('elStyleBoost');
+  const sim  = document.getElementById('elSimilarity');
+  if (stab) { stab.value = String(p.stability);  document.getElementById('stabilityVal').textContent  = p.stability.toFixed(2); }
+  if (styl) { styl.value = String(p.style);      document.getElementById('styleBoostVal').textContent = p.style.toFixed(2); }
+  if (sim)  { sim.value  = String(p.similarity); document.getElementById('similarityVal').textContent = p.similarity.toFixed(2); }
   updateExpressivenessPreview();
 }
 
 function updateExpressivenessPreview() {
-  // Read live slider values
-  const stab  = parseFloat((document.getElementById('elStability')  as HTMLInputElement)?.value ?? '0.35');
-  const style = parseFloat((document.getElementById('elStyleBoost') as HTMLInputElement)?.value ?? '0.75');
+  const stabEl  = document.getElementById('elStability');
+  const styleEl = document.getElementById('elStyleBoost');
+  const stab  = parseFloat(stabEl  ? stabEl.value  : '0.35');
+  const style = parseFloat(styleEl ? styleEl.value : '0.75');
   VOICE_PERSONALITY.stability  = stab;
   VOICE_PERSONALITY.styleBoost = style;
-
   const el = document.getElementById('expressivenessPreview');
   if (!el) return;
-
-  const voiceName = VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender][VOICE_PERSONALITY.style] ?? 'Rachel';
-
-  let label = '';
-  let color = '#ff6b9d';
-  if (stab < 0.32 && style > 0.85) {
-    label = '🔥 ULTRA Expressive — Maximum character!';  color = '#ff4444';
-  } else if (stab < 0.45 && style > 0.65) {
-    label = '✨ Very Expressive — Perfect for children!'; color = '#ff6b9d';
-  } else if (stab < 0.55) {
-    label = '😊 Expressive — Warm and engaging';          color = '#f59e0b';
-  } else if (stab > 0.65) {
-    label = '🌙 Calm & Soothing — Great for lullabies';  color = '#60a5fa';
-  } else {
-    label = '⭐ Balanced — Natural speech';               color = '#a78bfa';
-  }
-
+  const names = VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender];
+  const voiceName = (names && names[VOICE_PERSONALITY.style]) || 'Rachel';
+  let label = '', color = '#ff6b9d';
+  if (stab < 0.32 && style > 0.85)      { label = '🔥 ULTRA Expressive — Maximum character!';  color = '#ff4444'; }
+  else if (stab < 0.45 && style > 0.65) { label = '✨ Very Expressive — Perfect for children!'; color = '#ff6b9d'; }
+  else if (stab < 0.55)                  { label = '😊 Expressive — Warm and engaging';          color = '#f59e0b'; }
+  else if (stab > 0.65)                  { label = '🌙 Calm & Soothing — Great for lullabies';  color = '#60a5fa'; }
+  else                                   { label = '⭐ Balanced — Natural speech';               color = '#a78bfa'; }
   el.textContent = label + '  |  ' + voiceName;
   el.style.color = color;
   el.style.background = color + '22';
 }
 
 async function testVoice() {
-  const input = document.getElementById('voiceTestInput') as HTMLInputElement;
+  const input  = document.getElementById('voiceTestInput');
   const status = document.getElementById('voiceTestStatus');
-  const btn    = document.getElementById('voiceTestBtn') as HTMLButtonElement;
-  const text   = input?.value?.trim() || 'Wow, let\'s make some amazing music together!';
-
+  const btn    = document.getElementById('voiceTestBtn');
+  const text   = (input && input.value.trim()) || "Wow, let's make some amazing music together!";
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Generating...'; }
   if (status) status.textContent = '⏳ Calling Groq Personality + ElevenLabs...';
-
   try {
-    // Post directly via speakText so it goes through the full 3-stage pipeline
-    const emotion: TTSEmotion = VOICE_PERSONALITY.style === 'soothing' ? 'calm'
-                               : VOICE_PERSONALITY.style === 'energetic' ? 'excited'
-                               : VOICE_PERSONALITY.style === 'playful' ? 'encouraging'
-                               : 'friendly';
-
-    await speakText(text, emotion as any);
-
+    const emotion = VOICE_PERSONALITY.style === 'soothing'  ? 'calm'
+                  : VOICE_PERSONALITY.style === 'energetic' ? 'excited'
+                  : VOICE_PERSONALITY.style === 'playful'   ? 'encouraging'
+                  : 'friendly';
+    await speakText(text, emotion);
+    const names = VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender];
+    const voiceName = (names && names[VOICE_PERSONALITY.style]) || 'Rachel';
     if (status) status.textContent = '✅ Playing! Stability=' + VOICE_PERSONALITY.stability.toFixed(2)
-      + ' Style=' + VOICE_PERSONALITY.styleBoost.toFixed(2)
-      + ' (' + VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender][VOICE_PERSONALITY.style] + ')';
-  } catch (e: any) {
-    if (status) status.textContent = '❌ Error: ' + (e?.message || 'TTS failed');
+      + ' Style=' + VOICE_PERSONALITY.styleBoost.toFixed(2) + ' (' + voiceName + ')';
+  } catch(e) {
+    if (status) status.textContent = '❌ Error: ' + (e && e.message ? e.message : 'TTS failed');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-play mr-1"></i> Test'; }
   }
 }
 
 async function saveVoiceSettings() {
-  // Read final slider values
-  VOICE_PERSONALITY.stability  = parseFloat((document.getElementById('elStability')  as HTMLInputElement)?.value ?? '0.35');
-  VOICE_PERSONALITY.styleBoost = parseFloat((document.getElementById('elStyleBoost') as HTMLInputElement)?.value ?? '0.75');
-  VOICE_PERSONALITY.similarity = parseFloat((document.getElementById('elSimilarity') as HTMLInputElement)?.value ?? '0.60');
-  VOICE_PERSONALITY.groqEnabled = (document.getElementById('groqPersonalityToggle') as HTMLInputElement)?.checked ?? true;
-
+  const stabEl = document.getElementById('elStability');
+  const stylEl = document.getElementById('elStyleBoost');
+  const simEl  = document.getElementById('elSimilarity');
+  const togEl  = document.getElementById('groqPersonalityToggle');
+  VOICE_PERSONALITY.stability  = parseFloat(stabEl ? stabEl.value : '0.35');
+  VOICE_PERSONALITY.styleBoost = parseFloat(stylEl ? stylEl.value : '0.75');
+  VOICE_PERSONALITY.similarity = parseFloat(simEl  ? simEl.value  : '0.60');
+  VOICE_PERSONALITY.groqEnabled = togEl ? togEl.checked : true;
   try {
     const r = await api('PUT', '/tts/prefs', {
-      voiceGender:    VOICE_PERSONALITY.gender,
-      voiceStyle:     VOICE_PERSONALITY.style,
-      stability:      VOICE_PERSONALITY.stability,
-      styleBoost:     VOICE_PERSONALITY.styleBoost,
-      similarity:     VOICE_PERSONALITY.similarity,
+      voiceGender:     VOICE_PERSONALITY.gender,
+      voiceStyle:      VOICE_PERSONALITY.style,
+      stability:       VOICE_PERSONALITY.stability,
+      styleBoost:      VOICE_PERSONALITY.styleBoost,
+      similarity:      VOICE_PERSONALITY.similarity,
       groqPersonality: VOICE_PERSONALITY.groqEnabled,
     });
-
+    const names = VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender];
+    const voiceName = (names && names[VOICE_PERSONALITY.style]) || 'Rachel';
     if (r.success !== false) {
-      showToast('Voice settings saved! ' + VOICE_PERSONALITY.VOICE_NAMES[VOICE_PERSONALITY.gender][VOICE_PERSONALITY.style], '🎤', 'success');
+      showToast('Voice settings saved! ' + voiceName, '🎤', 'success');
       VOICE_PERSONALITY._saved = true;
-
-      // Update engine status badge
       const statusEl = document.getElementById('voiceEngineStatus');
       if (statusEl) {
         statusEl.textContent = (VOICE_PERSONALITY.groqEnabled ? '🧠 Groq + ' : '') + 'ElevenLabs Active';
@@ -6139,11 +6119,9 @@ async function saveVoiceSettings() {
     } else {
       showToast('Saved locally (API unavailable)', '💾', 'info');
     }
-  } catch {
+  } catch(e) {
     showToast('Saved locally', '💾', 'info');
   }
-
-  // Always persist to localStorage as backup
   localStorage.setItem('mb_voice_personality', JSON.stringify({
     gender:      VOICE_PERSONALITY.gender,
     style:       VOICE_PERSONALITY.style,
@@ -6155,48 +6133,39 @@ async function saveVoiceSettings() {
 }
 
 async function loadVoiceSettings() {
-  // 1. Try loading from API
   try {
     const r = await api('GET', '/tts/prefs');
     if (r.success !== false && r.data) {
       const d = r.data;
-      if (d.voiceGender)  VOICE_PERSONALITY.gender      = d.voiceGender;
-      if (d.voiceStyle)   VOICE_PERSONALITY.style       = d.voiceStyle;
-      if (d.stability  != null) VOICE_PERSONALITY.stability  = d.stability;
-      if (d.styleBoost != null) VOICE_PERSONALITY.styleBoost = d.styleBoost;
-      if (d.similarity != null) VOICE_PERSONALITY.similarity = d.similarity;
+      if (d.voiceGender)           VOICE_PERSONALITY.gender      = d.voiceGender;
+      if (d.voiceStyle)            VOICE_PERSONALITY.style       = d.voiceStyle;
+      if (d.stability  != null)    VOICE_PERSONALITY.stability   = d.stability;
+      if (d.styleBoost != null)    VOICE_PERSONALITY.styleBoost  = d.styleBoost;
+      if (d.similarity != null)    VOICE_PERSONALITY.similarity  = d.similarity;
       if (d.groqPersonality != null) VOICE_PERSONALITY.groqEnabled = d.groqPersonality;
     }
-  } catch {
-    // 2. Fall back to localStorage
+  } catch(e) {
     try {
       const saved = JSON.parse(localStorage.getItem('mb_voice_personality') || '{}');
-      if (saved.gender)    VOICE_PERSONALITY.gender      = saved.gender;
-      if (saved.style)     VOICE_PERSONALITY.style       = saved.style;
-      if (saved.stability  != null) VOICE_PERSONALITY.stability  = saved.stability;
-      if (saved.styleBoost != null) VOICE_PERSONALITY.styleBoost = saved.styleBoost;
-      if (saved.similarity != null) VOICE_PERSONALITY.similarity = saved.similarity;
+      if (saved.gender)             VOICE_PERSONALITY.gender      = saved.gender;
+      if (saved.style)              VOICE_PERSONALITY.style       = saved.style;
+      if (saved.stability  != null) VOICE_PERSONALITY.stability   = saved.stability;
+      if (saved.styleBoost != null) VOICE_PERSONALITY.styleBoost  = saved.styleBoost;
+      if (saved.similarity != null) VOICE_PERSONALITY.similarity  = saved.similarity;
       if (saved.groqEnabled != null) VOICE_PERSONALITY.groqEnabled = saved.groqEnabled;
-    } catch {}
+    } catch(e2) {}
   }
-
-  // 3. Apply loaded values to UI
   setVoiceGender(VOICE_PERSONALITY.gender);
   setVoiceStyle(VOICE_PERSONALITY.style);
-
-  const stab = document.getElementById('elStability')  as HTMLInputElement;
-  const styl = document.getElementById('elStyleBoost') as HTMLInputElement;
-  const sim  = document.getElementById('elSimilarity') as HTMLInputElement;
-  const tog  = document.getElementById('groqPersonalityToggle') as HTMLInputElement;
-
-  if (stab) { stab.value = String(VOICE_PERSONALITY.stability);  document.getElementById('stabilityVal')!.textContent  = VOICE_PERSONALITY.stability.toFixed(2); }
-  if (styl) { styl.value = String(VOICE_PERSONALITY.styleBoost); document.getElementById('styleBoostVal')!.textContent = VOICE_PERSONALITY.styleBoost.toFixed(2); }
-  if (sim)  { sim.value  = String(VOICE_PERSONALITY.similarity); document.getElementById('similarityVal')!.textContent = VOICE_PERSONALITY.similarity.toFixed(2); }
+  const stab = document.getElementById('elStability');
+  const styl = document.getElementById('elStyleBoost');
+  const sim  = document.getElementById('elSimilarity');
+  const tog  = document.getElementById('groqPersonalityToggle');
+  if (stab) { stab.value = String(VOICE_PERSONALITY.stability);  document.getElementById('stabilityVal').textContent  = VOICE_PERSONALITY.stability.toFixed(2); }
+  if (styl) { styl.value = String(VOICE_PERSONALITY.styleBoost); document.getElementById('styleBoostVal').textContent = VOICE_PERSONALITY.styleBoost.toFixed(2); }
+  if (sim)  { sim.value  = String(VOICE_PERSONALITY.similarity); document.getElementById('similarityVal').textContent = VOICE_PERSONALITY.similarity.toFixed(2); }
   if (tog)  { tog.checked = VOICE_PERSONALITY.groqEnabled; }
-
   updateExpressivenessPreview();
-
-  // 4. Update engine status badge
   const statusEl = document.getElementById('voiceEngineStatus');
   if (statusEl) {
     statusEl.textContent = (VOICE_PERSONALITY.groqEnabled ? '🧠 Groq + ' : '') + 'ElevenLabs';
@@ -6204,21 +6173,14 @@ async function loadVoiceSettings() {
   }
 }
 
-// ── BehaviorTone → TTSEmotion bridge ──────────────────────────
-// Groq returns BehaviorTone values; speakText needs TTSEmotion.
-type TTSEmotion = 'friendly'|'excited'|'singing'|'calm'|'encouraging'|'surprised'|'whisper';
-function toneToEmotion(tone: string): TTSEmotion {
-  const map: Record<string,TTSEmotion> = {
-    excited:      'excited',
-    celebratory:  'excited',
-    playful:      'encouraging',
-    warm:         'friendly',
-    encouraging:  'encouraging',
-    soothing:     'calm',
-    gentle:       'calm',
-    curious:      'friendly',
+// ── BehaviorTone → TTSEmotion bridge ─────────────────────────
+function toneToEmotion(tone) {
+  const map = {
+    excited: 'excited', celebratory: 'excited', playful: 'encouraging',
+    warm: 'friendly', encouraging: 'encouraging', soothing: 'calm',
+    gentle: 'calm', curious: 'friendly',
   };
-  return map[tone] ?? 'friendly';
+  return map[tone] || 'friendly';
 }
 
 async function init() {
