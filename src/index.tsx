@@ -6567,8 +6567,8 @@ function singLyricsWithSong(songTitle, style, durationSecs) {
   }
 
   // Split into singable lines
-  var lines = lyrics.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 2; });
-  if (lines.length === 0) lines = _defaultLyrics(style, name).split('\n');
+  var lines = lyrics.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 2; });
+  if (lines.length === 0) lines = _defaultLyrics(style, name).split('\\n');
 
   // Show lyrics display
   var lyricsEl = document.getElementById('singAlongDisplay');
@@ -6614,12 +6614,12 @@ function singLyricsWithSong(songTitle, style, durationSecs) {
 
 function _defaultLyrics(style, name) {
   var styles = {
-    playful:   'Hey ' + name + ', let\'s play today!\nJump and dance and shout hooray!\nLa la la, come sing with me!\nWe\'re happy as can be!',
-    energetic: 'Go go go, feel the beat!\nStamp your feet and feel the heat!\nYou can do it, ' + name + '!\nMove and groove all day!',
-    calm:      'Close your eyes, ' + name + ', and breathe...\nSoft and slow, just like the leaves.\nLa la la, sweet and low.\nGentle music, soft and slow.',
-    lullaby:   'Sleep tight, sweet ' + name + ', goodnight.\nStars are twinkling, shining bright.\nDream of songs and happy days.\nDrifting off in gentle haze.',
-    educational: 'A B C, come learn with me!\nNumbers, letters, one two three!\nWe\'re so smart, ' + name + ' and me!\nLearning\'s fun as it can be!',
-    adventure: name + ', let\'s go explore!\nEvery day there\'s something more!\nAdventures wait, let\'s sing along!\nWe\'re brave and happy, we\'re so strong!',
+    playful:   'Hey ' + name + ', let\'s play today!\\nJump and dance and shout hooray!\\nLa la la, come sing with me!\\nWe\'re happy as can be!',
+    energetic: 'Go go go, feel the beat!\\nStamp your feet and feel the heat!\\nYou can do it, ' + name + '!\\nMove and groove all day!',
+    calm:      'Close your eyes, ' + name + ', and breathe...\\nSoft and slow, just like the leaves.\\nLa la la, sweet and low.\\nGentle music, soft and slow.',
+    lullaby:   'Sleep tight, sweet ' + name + ', goodnight.\\nStars are twinkling, shining bright.\\nDream of songs and happy days.\\nDrifting off in gentle haze.',
+    educational: 'A B C, come learn with me!\\nNumbers, letters, one two three!\\nWe\'re so smart, ' + name + ' and me!\\nLearning\'s fun as it can be!',
+    adventure: name + ', let\'s go explore!\\nEvery day there\'s something more!\\nAdventures wait, let\'s sing along!\\nWe\'re brave and happy, we\'re so strong!',
   };
   return styles[style] || styles.playful;
 }
