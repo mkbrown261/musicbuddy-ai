@@ -4885,7 +4885,7 @@ const VOICE_INPUT = {
       VOICE_INPUT._listening = false;
       const expected = expectedPhrase.toLowerCase();
       // Fuzzy match: check if any key word present
-      const words = expected.split(/\s+/);
+      const words = expected.split(/\\s+/);
       const matched = words.some(w => w.length > 2 && transcript.includes(w));
       if (matched || transcript.includes(expected)) {
         _settled = true;
