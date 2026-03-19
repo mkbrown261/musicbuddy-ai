@@ -4384,19 +4384,19 @@ const WEBCAM = {
         audio: false,
       });
       WEBCAM.stream = stream;
-      (video as HTMLVideoElement).srcObject = stream;
-      (video as HTMLVideoElement).style.transform = 'scaleX(-1)'; // mirror — feels natural
-      (video as HTMLVideoElement).style.display = 'block';
+      video.srcObject = stream;
+      video.style.transform = 'scaleX(-1)'; // mirror — feels natural
+      video.style.display = 'block';
       if (placeholder) placeholder.style.display = 'none';
 
       // Wait for video to actually be ready before starting detection
-      (video as HTMLVideoElement).onloadedmetadata = () => {
-        (video as HTMLVideoElement).play().catch(() => {});
+      video.onloadedmetadata = () => {
+        video.play().catch(() => {});
         WEBCAM.startFaceDetection(video);
       };
 
       document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live';
-    } catch (err: any) {
+    } catch (err) {
       // Camera permission denied or unavailable — show friendly fallback
       console.warn('[Webcam] Camera not available:', err.message);
       if (placeholder) {
