@@ -3306,6 +3306,8 @@ const MINIGAME = {
       window._activeTTSAudio = null;
     }
   },
+
+  voiceRhythm() {
     if (!MINIGAME.active) return;
     const micStatus = document.getElementById('mgMicStatus');
     if (micStatus) micStatus.textContent = '🎤 Say "done" when you finish tapping!';
