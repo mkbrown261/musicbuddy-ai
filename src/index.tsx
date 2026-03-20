@@ -1979,6 +1979,9 @@ function getMainHTML(): string {
           </div>
         </div>
       </div>
+
+      <!-- Audio Settings -->
+      <div class="glass p-6">
         <h3 class="font-black text-lg mb-4 flex items-center gap-2">
           <i class="fas fa-volume-up text-blue-400"></i> Audio Settings
         </h3>
@@ -4143,7 +4146,10 @@ const STYLE_EMOJIS = { playful:'🎈', upbeat:'⚡', lullaby:'🌙', classical:'
 // ── API Helpers ───────────────────────────────────────────────
 async function api(method, path, body) {
   try {
-    const opts = { method, headers: {'Content-Type':'application/json'} };
+    const token = localStorage.getItem('mb_auth_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const opts = { method, headers };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch('/api' + path, opts);
     return await res.json();
@@ -8373,21 +8379,40 @@ var LESSONS = (function() {
 
   function start(id, locked) {
     if (locked) { showToast('Upgrade to unlock this lesson! 🔓','⭐','info'); switchTab('billing'); return; }
-    if (!state.childId) { showToast('Select a child first','👶','warning'); return; }
-    api('POST','/lessons/start',{lesson_id:id,child_id:state.childId}).then(function(r){
-      if (!r.success) { showToast(r.error||'Failed to start lesson','❌','error'); return; }
-      state.progress=r.data.progress_id; state.stepIdx=0;
-      api('GET','/lessons/'+id).then(function(lr){
-        if (!lr.success) return;
-        state.lesson=lr.data;
-        var panel=document.getElementById('activeLessonPanel');
-        if(panel) panel.classList.remove('hidden');
-        var title=document.getElementById('lessonTitle');
-        if(title) title.textContent=lr.data.thumbnail_emoji+' '+lr.data.title;
-        renderStep();
-        speakText((lr.data.steps||[])[0]?.text||"Let's start!",'excited');
-      });
+    var childId = state.childId || (STATE.selectedChild && STATE.selectedChild.id) || null;
+    var grid = document.getElementById('lessonsGrid');
+    if(grid) grid.innerHTML = '<div class="glass p-8 text-center col-span-2"><div class="text-4xl mb-2 animate-bounce">⏳</div><div class="text-gray-400">Loading lesson…</div></div>';
+    api('POST','/lessons/start',{lesson_id:id,child_id:childId}).then(function(r){
+      if (!r.success) {
+        if (r.locked) { showToast(r.error||'Upgrade to unlock','⭐','info'); switchTab('billing'); load(); return; }
+        showToast(r.error||'Could not start lesson','❌','error'); load(); return;
+      }
+      var d = r.data;
+      state.progress = d.progress_id;
+      state.stepIdx  = 0;
+      if (d.steps && d.steps.length) {
+        state.lesson = d;
+        _openLessonPanel(d);
+      } else {
+        api('GET','/lessons/'+id).then(function(lr){
+          if (!lr.success) { showToast('Could not load lesson','❌','error'); load(); return; }
+          state.lesson = lr.data;
+          _openLessonPanel(lr.data);
+        });
+      }
     });
+  }
+
+  function _openLessonPanel(lesson) {
+    var panel = document.getElementById('activeLessonPanel');
+    var grid  = document.getElementById('lessonsGrid');
+    if (grid)  grid.classList.add('hidden');
+    if (panel) { panel.classList.remove('hidden'); panel.scrollIntoView({behavior:'smooth',block:'start'}); }
+    var title = document.getElementById('lessonTitle');
+    if (title) title.textContent = (lesson.thumbnail_emoji||'📚') + ' ' + lesson.title;
+    renderStep();
+    var steps = lesson.steps || [];
+    if (steps[0]) speakText(steps[0].text, 'excited');
   }
 
   function renderStep() {
