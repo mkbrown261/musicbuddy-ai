@@ -22,6 +22,8 @@ import { intentRoute } from './routes/intent'
 import { auth } from './routes/auth'
 import { tts } from './routes/tts'
 import { groq } from './routes/groq'
+import { lessons } from './routes/lessons'
+import { analytics } from './routes/analytics'
 
 // Bootstrap all Intent Layer modules (runs once at edge startup)
 import { bootstrapModules } from './lib/modules/index'
@@ -52,13 +54,15 @@ app.route('/api/intent', intentRoute)
 app.route('/api/auth', auth)
 app.route('/api/tts', tts)
 app.route('/api/groq', groq)
+app.route('/api/lessons', lessons)
+app.route('/api/analytics', analytics)
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (c) => {
   return c.json({
     status: 'ok',
     service: 'AI Music Companion for Children',
-    version: '2.0.0-modular',
+    version: '3.0.0-full-platform',
     timestamp: new Date().toISOString(),
     layers: {
       ui: 'active',
@@ -66,8 +70,55 @@ app.get('/api/health', (c) => {
       logic: 'active',
       database: 'active',
       hosting: 'cloudflare-pages'
-    }
+    },
+    modules: [
+      'tts-tiered', 'groq-behavior', 'credits', 'stripe',
+      'lessons', 'analytics', 'animations', 'voice-picker',
+      'parent-dashboard', 'emotion-engine', 'memory-engine'
+    ]
   })
+})
+
+// ── Spec-compliant shortcut aliases ───────────────────────────
+// POST /create-checkout-session  → /api/billing/checkout
+app.post('/create-checkout-session', (c) => {
+  const url = new URL(c.req.url); url.pathname = '/api/billing/checkout';
+  return app.fetch(new Request(url.toString(), c.req.raw), c.env as any, {} as any);
+})
+// POST /webhook/stripe → /api/billing/webhook/stripe
+app.post('/webhook/stripe', (c) => {
+  const url = new URL(c.req.url); url.pathname = '/api/billing/webhook/stripe';
+  return app.fetch(new Request(url.toString(), c.req.raw), c.env as any, {} as any);
+})
+// GET /credits → /api/billing/credits
+app.get('/credits', (c) => {
+  const url = new URL(c.req.url); url.pathname = '/api/billing/credits';
+  return app.fetch(new Request(url.toString(), c.req.raw), c.env as any, {} as any);
+})
+// POST /use-credit → /api/billing/use-credit
+app.post('/use-credit', (c) => {
+  const url = new URL(c.req.url); url.pathname = '/api/billing/use-credit';
+  return app.fetch(new Request(url.toString(), c.req.raw), c.env as any, {} as any);
+})
+// GET /lessons → /api/lessons
+app.get('/lessons', (c) => {
+  const url = new URL(c.req.url); url.pathname = '/api/lessons';
+  return app.fetch(new Request(url.toString(), c.req.raw), c.env as any, {} as any);
+})
+// POST /start-lesson → /api/lessons/start
+app.post('/start-lesson', (c) => {
+  const url = new URL(c.req.url); url.pathname = '/api/lessons/start';
+  return app.fetch(new Request(url.toString(), c.req.raw), c.env as any, {} as any);
+})
+// POST /submit-answer → /api/lessons/answer
+app.post('/submit-answer', (c) => {
+  const url = new URL(c.req.url); url.pathname = '/api/lessons/answer';
+  return app.fetch(new Request(url.toString(), c.req.raw), c.env as any, {} as any);
+})
+// GET /analytics → /api/analytics
+app.get('/analytics', (c) => {
+  const url = new URL(c.req.url); url.pathname = '/api/analytics';
+  return app.fetch(new Request(url.toString(), c.req.raw), c.env as any, {} as any);
 })
 
 // ── Main UI (served from root) ────────────────────────────────
@@ -486,6 +537,38 @@ function getMainHTML(): string {
     }
     .auth-card { max-width: 420px; width: 90%; }
     .auth-tab-active { background: linear-gradient(135deg,#ff6b9d,#c44dbb); border-radius:10px; }
+
+    /* ── Lesson system ── */
+    .lesson-card {
+      background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.08);
+      border-radius: 16px; padding: 16px; cursor: pointer; transition: all 0.2s;
+    }
+    .lesson-card:hover:not(.locked) { border-color: rgba(168,85,247,0.5); background: rgba(168,85,247,0.08); transform: translateY(-2px); }
+    .lesson-card.locked { opacity: 0.55; cursor: not-allowed; }
+    .lesson-filter-btn {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; color: #aaa; font-weight: 700; font-size: 0.75rem;
+      cursor: pointer; padding: 6px 14px; transition: all 0.2s;
+    }
+    .lesson-filter-btn:hover { background: rgba(168,85,247,0.15); color: #c084fc; border-color: rgba(168,85,247,0.3); }
+    .lesson-filter-btn.active { background: rgba(168,85,247,0.2); color: #c084fc; border-color: #c084fc; }
+    .answer-btn {
+      background: rgba(255,255,255,0.07); border: 2px solid rgba(255,255,255,0.12);
+      border-radius: 12px; color: white; font-weight: 700; padding: 14px 10px;
+      cursor: pointer; transition: all 0.2s; font-size: 0.9rem; width: 100%;
+    }
+    .answer-btn:hover { border-color: rgba(168,85,247,0.5); background: rgba(168,85,247,0.1); }
+    .answer-btn.correct { background: rgba(107,203,119,0.25); border-color: #6bcb77; }
+    .answer-btn.wrong   { background: rgba(255,80,80,0.2);   border-color: #ff5050; }
+    /* ── Billing plan cards ── */
+    .plan-card {
+      background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.08);
+      border-radius: 18px; padding: 20px; transition: all 0.2s;
+    }
+    .plan-card.highlight { border-color: rgba(255,107,157,0.5); background: rgba(255,107,157,0.05); }
+    .plan-card.current   { border-color: rgba(74,222,128,0.5); background: rgba(74,222,128,0.05); }
+    /* ── Confetti canvas ── */
+    #confettiCanvas { position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999; }
   </style>
 </head>
 <body class="bg-animated min-h-screen">
@@ -749,6 +832,14 @@ function getMainHTML(): string {
         <span>Live Session</span>
       </div>
       <div class="flex items-center gap-2">
+        <!-- Credits display -->
+        <div id="creditsHeaderWrap" class="hidden">
+          <button onclick="switchTab('billing')" class="text-xs font-black px-3 py-1.5 rounded-full transition-all"
+            style="background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3)">
+            <i class="fas fa-coins mr-1"></i>
+            <span id="creditsDisplay">— cr</span>
+          </button>
+        </div>
         <!-- Logged-in user badge with logout -->
         <div id="userBadge" class="hidden items-center gap-2 glass-light px-3 py-1.5 rounded-full text-sm">
           <i class="fas fa-user-circle text-purple-400"></i>
@@ -788,6 +879,12 @@ function getMainHTML(): string {
     </button>
     <button class="tab-btn whitespace-nowrap" onclick="switchTab('settings')" id="tab-settings">
       <i class="fas fa-sliders-h mr-1"></i> Settings
+    </button>
+    <button class="tab-btn whitespace-nowrap" onclick="switchTab('lessons')" id="tab-lessons">
+      <i class="fas fa-graduation-cap mr-1"></i> Lessons
+    </button>
+    <button class="tab-btn whitespace-nowrap" onclick="switchTab('billing')" id="tab-billing">
+      <i class="fas fa-star mr-1"></i> Plans
     </button>
   </div>
 
@@ -2036,6 +2133,167 @@ function getMainHTML(): string {
 
 <!-- Audio element for playing snippets -->
 <audio id="audioPlayer" style="display:none" onended="onAudioEnded()"></audio>
+
+<!-- ══════════════════ TAB: LESSONS ══════════════════════════ -->
+<div id="tab-content-lessons" class="tab-content px-4 py-4 hidden">
+  <div class="max-w-3xl mx-auto">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="font-black text-xl flex items-center gap-2">
+        <i class="fas fa-graduation-cap text-purple-400"></i> Learning Lessons
+      </h2>
+      <div id="lessonsChildBadge" class="text-xs px-3 py-1.5 rounded-full font-bold" style="background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3)">
+        Select a child first
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="flex gap-2 flex-wrap mb-4">
+      <button class="lesson-filter-btn active" data-topic="all" onclick="LESSONS.setFilter('all')">All</button>
+      <button class="lesson-filter-btn" data-topic="animals"   onclick="LESSONS.setFilter('animals')">🦁 Animals</button>
+      <button class="lesson-filter-btn" data-topic="numbers"   onclick="LESSONS.setFilter('numbers')">🔢 Numbers</button>
+      <button class="lesson-filter-btn" data-topic="colors"    onclick="LESSONS.setFilter('colors')">🌈 Colors</button>
+      <button class="lesson-filter-btn" data-topic="letters"   onclick="LESSONS.setFilter('letters')">📝 Letters</button>
+      <button class="lesson-filter-btn" data-topic="shapes"    onclick="LESSONS.setFilter('shapes')">🔷 Shapes</button>
+      <button class="lesson-filter-btn" data-topic="music"     onclick="LESSONS.setFilter('music')">🎵 Music</button>
+    </div>
+
+    <!-- Lesson grid -->
+    <div id="lessonsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+      <div class="glass p-6 text-center text-gray-500 col-span-2">
+        <i class="fas fa-graduation-cap text-3xl mb-2 block opacity-30"></i>
+        Select a child profile to see lessons
+      </div>
+    </div>
+
+    <!-- Active lesson panel (shown when lesson is in progress) -->
+    <div id="activeLessonPanel" class="glass p-6 hidden">
+      <div class="flex items-center justify-between mb-4">
+        <div id="lessonTitle" class="font-black text-lg"></div>
+        <button onclick="LESSONS.closeLesson()" class="text-gray-500 hover:text-white text-sm">
+          <i class="fas fa-times"></i> Close
+        </button>
+      </div>
+      <!-- Progress bar -->
+      <div class="w-full bg-gray-700 rounded-full h-2 mb-5">
+        <div id="lessonProgressBar" class="h-2 rounded-full transition-all duration-500" style="background:linear-gradient(90deg,#ff6b9d,#c084fc);width:0%"></div>
+      </div>
+      <!-- Step content -->
+      <div id="lessonStepContent" class="text-center py-4">
+        <div class="text-5xl mb-3" id="lessonStepEmoji">📚</div>
+        <div class="font-bold text-lg mb-4" id="lessonStepText"></div>
+        <div id="lessonAnswerOptions" class="grid grid-cols-2 gap-3 max-w-sm mx-auto"></div>
+        <button id="lessonNextBtn" class="btn-primary mt-4 hidden" onclick="LESSONS.nextStep()">
+          <i class="fas fa-arrow-right mr-2"></i> Continue
+        </button>
+      </div>
+      <!-- Feedback -->
+      <div id="lessonFeedback" class="hidden text-center mt-3 p-3 rounded-xl font-bold text-sm"></div>
+    </div>
+
+    <!-- Generate lesson (premium) -->
+    <div class="glass p-5" id="generateLessonPanel">
+      <div class="flex items-center gap-2 mb-3">
+        <i class="fas fa-wand-magic-sparkles text-purple-400"></i>
+        <span class="font-black text-sm">AI Lesson Generator</span>
+        <span class="text-xs px-2 py-0.5 rounded-full ml-1" style="background:rgba(245,158,11,0.2);color:#f59e0b">Starter+</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        <select id="genTopic" class="glass-light text-xs p-2 rounded-lg border-0 text-white bg-transparent" style="background:rgba(255,255,255,0.08)">
+          <option value="animals">Animals</option>
+          <option value="numbers">Numbers</option>
+          <option value="colors">Colors</option>
+          <option value="letters">Letters</option>
+          <option value="shapes">Shapes</option>
+          <option value="music">Music</option>
+          <option value="science">Science</option>
+          <option value="geography">Geography</option>
+        </select>
+        <select id="genDifficulty" class="glass-light text-xs p-2 rounded-lg border-0 text-white" style="background:rgba(255,255,255,0.08)">
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <button onclick="LESSONS.generate()" class="btn-primary text-xs" id="genLessonBtn">
+          <i class="fas fa-sparkles mr-1"></i> Generate
+        </button>
+      </div>
+      <div id="genLessonStatus" class="text-xs text-gray-500"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ TAB: BILLING / PLANS ══════════════════ -->
+<div id="tab-content-billing" class="tab-content px-4 py-4 hidden">
+  <div class="max-w-2xl mx-auto">
+    <h2 class="font-black text-xl mb-5 flex items-center gap-2">
+      <i class="fas fa-star text-yellow-400"></i> Plans &amp; Credits
+    </h2>
+
+    <!-- Credits widget -->
+    <div class="glass p-5 mb-4" style="background:rgba(255,107,157,0.06);border-color:rgba(255,107,157,0.2)">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Your Credits</div>
+          <div class="text-4xl font-black" id="billingCreditCount">—</div>
+          <div class="text-xs text-gray-500 mt-1" id="billingTierBadge">Free Plan</div>
+        </div>
+        <div class="text-right">
+          <div class="text-xs text-gray-400 mb-2">Trial voices remaining</div>
+          <div class="text-2xl font-black text-purple-400" id="billingTrialCount">—</div>
+          <button onclick="BILLING_V2.refreshCredits()" class="text-xs text-gray-500 hover:text-white mt-2 block">
+            <i class="fas fa-sync mr-1"></i> Refresh
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subscription plans -->
+    <div class="font-black text-sm text-gray-400 uppercase tracking-wider mb-3">Subscription Plans</div>
+    <div class="grid grid-cols-1 gap-3 mb-5" id="billingPlanCards">
+      <!-- Rendered by BILLING_V2.renderPlans() -->
+    </div>
+
+    <!-- Credit packs -->
+    <div class="font-black text-sm text-gray-400 uppercase tracking-wider mb-3">Credit Packs (One-Time)</div>
+    <div class="grid grid-cols-3 gap-3 mb-6" id="billingPackCards">
+      <!-- Rendered by BILLING_V2.renderPacks() -->
+    </div>
+
+    <!-- Recent transactions -->
+    <div class="glass p-5">
+      <div class="font-black text-sm mb-3 flex items-center gap-2">
+        <i class="fas fa-receipt text-gray-400"></i> Recent Transactions
+      </div>
+      <div id="billingTransactions" class="space-y-2 text-xs text-gray-400">
+        <div class="text-center py-4 opacity-50">No transactions yet</div>
+      </div>
+    </div>
+
+    <!-- Analytics quick view -->
+    <div class="glass p-5 mt-4">
+      <div class="font-black text-sm mb-4 flex items-center gap-2">
+        <i class="fas fa-chart-line text-blue-400"></i> This Month's Activity
+      </div>
+      <div class="grid grid-cols-3 gap-3 text-center" id="analyticsQuickStats">
+        <div class="glass-light p-3 rounded-xl">
+          <div class="text-xl font-black text-green-400" id="statsLessons">—</div>
+          <div class="text-xs text-gray-400 mt-1">Lessons</div>
+        </div>
+        <div class="glass-light p-3 rounded-xl">
+          <div class="text-xl font-black text-pink-400" id="statsCredits">—</div>
+          <div class="text-xs text-gray-400 mt-1">Credits Used</div>
+        </div>
+        <div class="glass-light p-3 rounded-xl">
+          <div class="text-xl font-black text-purple-400" id="statsAccuracy">—</div>
+          <div class="text-xs text-gray-400 mt-1">Accuracy</div>
+        </div>
+      </div>
+      <button onclick="BILLING_V2.loadAnalytics()" class="text-xs text-gray-500 hover:text-white mt-3">
+        <i class="fas fa-sync mr-1"></i> Load stats
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- JAVASCRIPT - Full App Logic -->
@@ -3837,13 +4095,17 @@ function showToast(msg, icon='✨', type='info') {
 function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-content-' + tab).classList.remove('hidden');
-  document.getElementById('tab-' + tab).classList.add('active');
-  if (tab === 'profiles') loadProfiles();
+  const content = document.getElementById('tab-content-' + tab);
+  const btn     = document.getElementById('tab-' + tab);
+  if (content) content.classList.remove('hidden');
+  if (btn)     btn.classList.add('active');
+  if (tab === 'profiles')  loadProfiles();
   if (tab === 'dashboard') populateDashboardSelect();
-  if (tab === 'library') populateLibrarySelect();
-  if (tab === 'settings') loadSystemInfo();
-  if (tab === 'creator') initCreatorTab();
+  if (tab === 'library')   populateLibrarySelect();
+  if (tab === 'settings')  loadSystemInfo();
+  if (tab === 'creator')   initCreatorTab();
+  if (tab === 'lessons')   LESSONS.load();
+  if (tab === 'billing')   BILLING_V2.init();
 }
 
 // ── Modal ─────────────────────────────────────────────────────
@@ -7943,6 +8205,17 @@ async function init() {
   BILLING.updateTTSProviderUI();
   GATE.refresh();
 
+  // Show credits header
+  const creditsWrap = document.getElementById('creditsHeaderWrap');
+  if (creditsWrap) creditsWrap.classList.remove('hidden');
+  // Load credits count
+  api('GET', '/billing/credits').then((cr: any) => {
+    if (cr.success) {
+      const el = document.getElementById('creditsDisplay');
+      if (el) el.textContent = cr.data.credits + ' cr';
+    }
+  });
+
   // Load voice personality settings (user-level) + init VOICE_PICKER
   await loadVoiceSettings();
   if (typeof VOICE_PICKER !== 'undefined') VOICE_PICKER.init();
@@ -7983,6 +8256,328 @@ window.addEventListener('load', async () => {
   }
   // else: auth screen is visible; init() will be called after login
 });
+
+// ════════════════════════════════════════════════════════════
+// ANIMATION SYSTEM — Intent: TriggerAnimation
+// ════════════════════════════════════════════════════════════
+var ANIM = (function() {
+  var canvas, ctx, particles = [], running = false;
+
+  function ensureCanvas() {
+    if (document.getElementById('confettiCanvas')) { canvas = document.getElementById('confettiCanvas'); ctx = canvas.getContext('2d'); return; }
+    canvas = document.createElement('canvas');
+    canvas.id = 'confettiCanvas';
+    canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999';
+    document.body.appendChild(canvas);
+    ctx = canvas.getContext('2d');
+  }
+
+  function resize() { if (!canvas) return; canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+
+  function spawnParticles(count, colors) {
+    ensureCanvas(); resize();
+    for (var i = 0; i < count; i++) {
+      particles.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height*0.4, vx: (Math.random()-0.5)*7, vy: Math.random()*-9-3, size: Math.random()*10+5, color: colors[Math.floor(Math.random()*colors.length)], spin: (Math.random()-0.5)*0.25, angle: Math.random()*Math.PI*2, alpha: 1, gravity: 0.22, shape: ['rect','circle','star'][Math.floor(Math.random()*3)] });
+    }
+    if (!running) loop();
+  }
+
+  function drawStar(cx,cy,r){ctx.beginPath();for(var i=0;i<5;i++){var a=(i*4*Math.PI/5)-Math.PI/2;i===0?ctx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):ctx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));}ctx.closePath();ctx.fill();}
+
+  function loop() {
+    running = true;
+    if (!canvas) { running = false; return; }
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    particles = particles.filter(function(p){return p.alpha>0.01;});
+    particles.forEach(function(p){p.vy+=p.gravity;p.x+=p.vx;p.y+=p.vy;p.angle+=p.spin;p.alpha-=0.011;ctx.globalAlpha=Math.max(0,p.alpha);ctx.fillStyle=p.color;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.angle);if(p.shape==='circle'){ctx.beginPath();ctx.arc(0,0,p.size/2,0,Math.PI*2);ctx.fill();}else if(p.shape==='star'){drawStar(0,0,p.size/2);}else{ctx.fillRect(-p.size/2,-p.size/3,p.size,p.size*0.6);}ctx.restore();});
+    ctx.globalAlpha=1;
+    particles.length>0 ? requestAnimationFrame(loop) : (running=false);
+  }
+
+  var COLORS = { pink:['#ff6b9d','#ff4081','#ffd93d','#ff9800','#fff'], success:['#6bcb77','#4ade80','#22d3ee','#818cf8','#ffd93d'], gentle:['#c084fc','#818cf8','#60a5fa','#a5b4fc'] };
+
+  return {
+    trigger: function(type) {
+      switch(type) {
+        case 'confetti_burst':    spawnParticles(60,  COLORS.pink);    break;
+        case 'full_celebration':  spawnParticles(160, COLORS.success); break;
+        case 'celebration':       spawnParticles(100, COLORS.success); break;
+        case 'soft_encouragement':
+          var e=document.createElement('div'); e.textContent=['💪','⭐','🌟','✨'][Math.floor(Math.random()*4)];
+          e.style.cssText='position:fixed;bottom:30%;left:50%;transform:translateX(-50%);font-size:3rem;z-index:9998;animation:floatEmoji 1.5s ease forwards;pointer-events:none';
+          document.body.appendChild(e); setTimeout(function(){e.remove();},1600); break;
+        default: spawnParticles(80, COLORS.pink);
+      }
+    },
+    confetti:      function(){ spawnParticles(120,COLORS.pink); },
+    celebration:   function(){ spawnParticles(160,COLORS.success); },
+    encouragement: function(){ ANIM.trigger('soft_encouragement'); },
+  };
+})();
+(function(){var s=document.createElement('style');s.textContent='@keyframes floatEmoji{0%{opacity:0;transform:translateX(-50%) translateY(0)}20%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-120px)}}';document.head.appendChild(s);})();
+
+// ════════════════════════════════════════════════════════════
+// LESSONS MODULE
+// ════════════════════════════════════════════════════════════
+var LESSONS = (function() {
+  var state = { list:[], filtered:[], filterTopic:'all', progress:null, lesson:null, stepIdx:0, childId:null };
+
+  function load() {
+    var child = STATE.selectedChild;
+    if (!child) { renderEmpty('Select a child profile to see lessons'); return; }
+    state.childId = child.id;
+    var badge = document.getElementById('lessonsChildBadge');
+    if (badge) badge.textContent = child.name + ' (age ' + child.age + ')';
+    api('GET', '/lessons?age='+child.age+'&child_id='+child.id).then(function(r){
+      if (r.success) { state.list = r.data.lessons||[]; applyFilter(); }
+    });
+  }
+
+  function applyFilter() {
+    state.filtered = state.filterTopic==='all' ? state.list : state.list.filter(function(l){return l.topic===state.filterTopic;});
+    renderGrid();
+  }
+
+  function renderEmpty(msg) {
+    var g = document.getElementById('lessonsGrid');
+    if (g) g.innerHTML = '<div class="glass p-6 text-center text-gray-500 col-span-2"><i class="fas fa-graduation-cap text-3xl mb-2 block opacity-30"></i>'+msg+'</div>';
+  }
+
+  function renderGrid() {
+    var g = document.getElementById('lessonsGrid');
+    if (!g) return;
+    if (!state.filtered.length) { renderEmpty('No lessons found'); return; }
+    g.innerHTML = state.filtered.map(function(l) {
+      var locked = l.locked;
+      var prog = l.progress;
+      var statusBadge = prog ? (prog.status==='completed'?'<span class="text-xs px-2 py-0.5 rounded-full font-bold ml-1" style="background:rgba(107,203,119,0.2);color:#6bcb77">✓ Done '+Math.round(prog.score)+'%</span>':'<span class="text-xs px-2 py-0.5 rounded-full font-bold ml-1" style="background:rgba(245,158,11,0.2);color:#f59e0b">In Progress</span>') : '';
+      var tierBadge = l.tier_required!=='free'?'<span class="text-xs px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,0.15);color:#f59e0b">'+(l.tier_required==='starter'?'Starter+':'Premium')+'</span>':'<span class="text-xs px-2 py-0.5 rounded-full" style="background:rgba(74,222,128,0.15);color:#4ade80">Free</span>';
+      return '<div class="lesson-card'+(locked?' locked':'') + '" onclick="LESSONS.start('+l.id+','+locked+')">'
+        +'<div class="flex items-start justify-between mb-2"><div class="text-3xl">'+l.thumbnail_emoji+'</div><div class="flex flex-col items-end gap-1">'+tierBadge+statusBadge+'</div></div>'
+        +'<div class="font-black text-sm">'+l.title+'</div>'
+        +'<div class="text-xs text-gray-400 mt-1">'+l.topic+' · '+l.difficulty+' · '+(l.step_count||'?')+' steps</div>'
+        +(locked?'<div class="text-xs text-yellow-400 mt-2"><i class="fas fa-lock mr-1"></i>Upgrade to unlock</div>':'')
+        +'</div>';
+    }).join('');
+  }
+
+  function start(id, locked) {
+    if (locked) { showToast('Upgrade to unlock this lesson! 🔓','⭐','info'); switchTab('billing'); return; }
+    if (!state.childId) { showToast('Select a child first','👶','warning'); return; }
+    api('POST','/lessons/start',{lesson_id:id,child_id:state.childId}).then(function(r){
+      if (!r.success) { showToast(r.error||'Failed to start lesson','❌','error'); return; }
+      state.progress=r.data.progress_id; state.stepIdx=0;
+      api('GET','/lessons/'+id).then(function(lr){
+        if (!lr.success) return;
+        state.lesson=lr.data;
+        var panel=document.getElementById('activeLessonPanel');
+        if(panel) panel.classList.remove('hidden');
+        var title=document.getElementById('lessonTitle');
+        if(title) title.textContent=lr.data.thumbnail_emoji+' '+lr.data.title;
+        renderStep();
+        speakText((lr.data.steps||[])[0]?.text||"Let's start!",'excited');
+      });
+    });
+  }
+
+  function renderStep() {
+    var lesson=state.lesson; if(!lesson) return;
+    var steps=lesson.steps||[]; var step=steps[state.stepIdx]; if(!step) return;
+    var pct=Math.round((state.stepIdx/steps.length)*100);
+    var pbar=document.getElementById('lessonProgressBar'); if(pbar) pbar.style.width=pct+'%';
+    var emojiEl=document.getElementById('lessonStepEmoji'); if(emojiEl) emojiEl.textContent=step.emoji||'📚';
+    var textEl=document.getElementById('lessonStepText'); if(textEl) textEl.textContent=step.text||'';
+    var opts=document.getElementById('lessonAnswerOptions');
+    var nextBtn=document.getElementById('lessonNextBtn');
+    var fb=document.getElementById('lessonFeedback'); if(fb){fb.classList.add('hidden');fb.textContent='';}
+    if(step.type==='intro'||step.type==='reward'){
+      if(opts) opts.innerHTML='';
+      if(nextBtn) nextBtn.classList.remove('hidden');
+      if(step.type==='reward'){ANIM.celebration();speakText(step.text,'excited');}
+    } else if(step.type==='question'&&step.options){
+      if(nextBtn) nextBtn.classList.add('hidden');
+      if(opts) opts.innerHTML=step.options.map(function(o){return '<button class="answer-btn" onclick="LESSONS.answer(\''+o.replace(/'/g,"\\'")+'\')">' + o + '</button>';}).join('');
+    }
+  }
+
+  function answer(ans) {
+    document.querySelectorAll('.answer-btn').forEach(function(b){b.disabled=true;});
+    api('POST','/lessons/answer',{progress_id:state.progress,lesson_id:state.lesson.id,child_id:state.childId,step_index:state.stepIdx,answer:ans}).then(function(r){
+      if(!r.success) return;
+      var d=r.data;
+      document.querySelectorAll('.answer-btn').forEach(function(b){
+        if(b.textContent===d.correct_answer) b.classList.add('correct');
+        else if(b.textContent===ans&&!d.correct) b.classList.add('wrong');
+      });
+      var fb=document.getElementById('lessonFeedback');
+      if(fb){fb.classList.remove('hidden');fb.textContent=d.feedback_text;fb.style.background=d.correct?'rgba(107,203,119,0.15)':'rgba(255,80,80,0.15)';fb.style.color=d.correct?'#6bcb77':'#ff6b9d';}
+      ANIM.trigger(d.animation);
+      speakText(d.feedback_text,d.emotion_hint||(d.correct?'excited':'encouraging'));
+      if(d.is_complete){
+        ANIM.celebration();
+        setTimeout(function(){var nb=document.getElementById('lessonNextBtn');if(nb){nb.innerHTML='🏆 Finish!';nb.classList.remove('hidden');}},1000);
+      } else {
+        setTimeout(function(){state.stepIdx=d.next_step_index;renderStep();},1600);
+      }
+    });
+  }
+
+  function nextStep() {
+    var steps=state.lesson?.steps||[];
+    if(state.stepIdx>=steps.length-1){closeLesson();return;}
+    state.stepIdx++;
+    renderStep();
+    speakText((steps[state.stepIdx]?.text)||'','friendly');
+  }
+
+  function closeLesson() {
+    var panel=document.getElementById('activeLessonPanel');
+    if(panel) panel.classList.add('hidden');
+    state.lesson=null; state.progress=null; state.stepIdx=0;
+    load();
+  }
+
+  function setFilter(topic) {
+    state.filterTopic=topic;
+    document.querySelectorAll('.lesson-filter-btn').forEach(function(b){b.classList.toggle('active',b.dataset.topic===topic);});
+    applyFilter();
+  }
+
+  function generate() {
+    var btn=document.getElementById('genLessonBtn');
+    var status=document.getElementById('genLessonStatus');
+    var child=STATE.selectedChild;
+    if(!child){showToast('Select a child first','👶','warning');return;}
+    if(btn) btn.disabled=true;
+    if(status) status.textContent='⏳ Generating with AI…';
+    api('POST','/lessons/generate',{
+      topic:(document.getElementById('genTopic')?.value||'animals'),
+      difficulty:(document.getElementById('genDifficulty')?.value||'easy'),
+      age_group:child.age+'-'+(child.age+2), child_id:child.id,
+    }).then(function(r){
+      if(btn) btn.disabled=false;
+      if(!r.success){if(status) status.textContent='❌ '+(r.error||'Failed');if(r.locked){showToast('Upgrade to generate lessons!','⭐','info');switchTab('billing');}return;}
+      if(status) status.textContent='✅ Created: '+r.data.title;
+      showToast('New lesson: '+r.data.title+'!','🎓','success');
+      load();
+    });
+  }
+
+  return {load,start,answer,nextStep,closeLesson,setFilter,generate};
+})();
+
+// ════════════════════════════════════════════════════════════
+// BILLING_V2 MODULE
+// ════════════════════════════════════════════════════════════
+var BILLING_V2 = (function() {
+  var data={credits:0,tier:'free',trial:0,packs:[],transactions:[]};
+
+  function init(){ refreshCredits(); loadAnalytics(); }
+
+  function refreshCredits(){
+    api('GET','/billing/credits').then(function(r){
+      if(!r.success) return;
+      data.credits=r.data.credits; data.tier=r.data.subscription_tier;
+      data.trial=r.data.trial_uses_remaining; data.packs=r.data.credit_packs||[];
+      data.transactions=r.data.recent_transactions||[];
+      renderAll();
+      var el=document.getElementById('creditsDisplay');
+      if(el) el.textContent=data.credits+' credits';
+    });
+  }
+
+  function renderAll(){ renderCredits(); renderPlans(); renderPacks(); renderTransactions(); }
+
+  function renderCredits(){
+    var cc=document.getElementById('billingCreditCount'); if(cc) cc.textContent=data.credits;
+    var tb=document.getElementById('billingTierBadge'); if(tb) tb.textContent=(data.tier==='free'?'🆓 Free Plan':data.tier==='starter'?'⭐ Starter ($4.99/mo)':'💎 Premium ($9.99/mo)');
+    var tc=document.getElementById('billingTrialCount'); if(tc) tc.textContent=data.trial;
+  }
+
+  function renderPlans(){
+    var el=document.getElementById('billingPlanCards'); if(!el) return;
+    var plans=[
+      {id:'free',   name:'Free',    price:'$0',    credits:'3 lifetime', features:['Free games','5 premium TTS trials','Basic songs']},
+      {id:'starter',name:'Starter', price:'$4.99', credits:'15/month',   features:['All free features','Lessons access','15 credits/month','AI song gen']},
+      {id:'premium',name:'Premium', price:'$9.99', credits:'30/month',   features:['Everything in Starter','30 credits/month','Lesson generator','Priority TTS']},
+    ];
+    el.innerHTML=plans.map(function(p){
+      var isCurrent=data.tier===p.id;
+      var isHL=p.id==='starter';
+      return '<div class="plan-card'+(isCurrent?' current':'')+(isHL?' highlight':'') + '">'
+        +'<div class="flex items-center justify-between mb-3"><div><div class="font-black text-lg">'+p.name+'</div><div class="text-2xl font-black text-pink-400">'+p.price+(p.id!=='free'?'<span class="text-sm text-gray-400 font-normal">/mo</span>':'')+'</div></div>'
+        +'<div class="text-right"><div class="text-xs text-gray-400">Credits</div><div class="font-black text-purple-300">'+p.credits+'</div></div></div>'
+        +'<ul class="text-xs text-gray-300 space-y-1 mb-4">'+p.features.map(function(f){return '<li><i class="fas fa-check text-green-400 mr-2"></i>'+f+'</li>';}).join('')+'</ul>'
+        +(isCurrent?'<div class="text-center text-xs font-bold text-green-400 py-2"><i class="fas fa-check-circle mr-1"></i>Current Plan</div>'
+          :p.id!=='free'?'<button onclick="BILLING_V2.subscribe(\''+p.id+'\')" class="btn-primary w-full text-sm">Get '+p.name+' <i class="fas fa-arrow-right ml-1"></i></button>':'')
+        +'</div>';
+    }).join('');
+  }
+
+  function renderPacks(){
+    var el=document.getElementById('billingPackCards'); if(!el||!data.packs.length) return;
+    el.innerHTML=data.packs.map(function(p){
+      return '<div class="glass p-4 text-center"><div class="text-2xl font-black text-purple-300">'+p.credits+'</div>'
+        +'<div class="text-xs text-gray-400 mb-1">credits</div>'
+        +'<div class="font-black text-pink-400 mb-3">'+p.price_label+'</div>'
+        +'<button onclick="BILLING_V2.buyPack(\''+p.id+'\')" class="btn-primary w-full text-xs">Buy Now</button></div>';
+    }).join('');
+  }
+
+  function renderTransactions(){
+    var el=document.getElementById('billingTransactions'); if(!el) return;
+    if(!data.transactions.length){el.innerHTML='<div class="text-center py-4 opacity-50">No transactions yet</div>';return;}
+    el.innerHTML=data.transactions.map(function(t){
+      var amt=t.credits_delta>0?'<span class="text-green-400">+'+t.credits_delta+' cr</span>':'<span class="text-red-400">'+t.credits_delta+' cr</span>';
+      return '<div class="flex justify-between items-center py-2 border-b border-white/5"><div><div class="font-bold text-xs">'+t.description+'</div><div class="text-gray-600 text-xs">'+new Date(t.created_at).toLocaleDateString()+'</div></div>'+amt+'</div>';
+    }).join('');
+  }
+
+  function subscribe(planId){
+    showToast('Redirecting to checkout…','💳','info');
+    var priceIds=(window._stripePrices||{});
+    api('POST','/billing/checkout',{product_type:'subscription',price_id:priceIds[planId]||'',success_url:window.location.origin+'/?payment=success&plan='+planId,cancel_url:window.location.origin+'/?payment=cancelled'}).then(function(r){
+      if(r.success&&r.data?.checkout_url){window.location.href=r.data.checkout_url;}
+      else if(r.demo_mode){showToast('Stripe not configured — contact support','⚠️','warning');}
+      else{showToast(r.error||'Checkout failed','❌','error');}
+    });
+  }
+
+  function buyPack(packId){
+    showToast('Redirecting to checkout…','💳','info');
+    api('POST','/billing/checkout',{product_type:'credit_pack',pack_id:packId,success_url:window.location.origin+'/?payment=success&pack='+packId,cancel_url:window.location.origin+'/?payment=cancelled'}).then(function(r){
+      if(r.success&&r.data?.checkout_url){window.location.href=r.data.checkout_url;}
+      else if(r.demo_mode){showToast('Stripe not configured — contact support','⚠️','warning');}
+      else{showToast(r.error||'Checkout failed','❌','error');}
+    });
+  }
+
+  function loadAnalytics(){
+    api('GET','/analytics?days=30').then(function(r){
+      if(!r.success) return;
+      var d=r.data;
+      var ll=document.getElementById('statsLessons'); if(ll) ll.textContent=(d.lesson_stats?.total_completed||0)+'';
+      var cc=document.getElementById('statsCredits'); if(cc) cc.textContent=(d.credit_stats?.total_used||0)+'';
+      var ac=document.getElementById('statsAccuracy'); if(ac) ac.textContent=d.accuracy_rate!==null?d.accuracy_rate+'%':'—';
+    });
+  }
+
+  // Handle payment return
+  (function(){
+    var p=new URLSearchParams(window.location.search);
+    if(p.get('payment')==='success'){
+      showToast('Payment successful! Credits added. 🎉','✅','success');
+      ANIM.celebration();
+      history.replaceState({},'','/');
+      setTimeout(refreshCredits,1500);
+    } else if(p.get('payment')==='cancelled'){
+      showToast('Checkout cancelled','↩️','info');
+      history.replaceState({},'','/');
+    }
+  })();
+
+  return {init,refreshCredits,subscribe,buyPack,loadAnalytics};
+})();
 </script>
 </body>
 </html>`;

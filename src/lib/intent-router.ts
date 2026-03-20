@@ -72,7 +72,31 @@ export type IntentType =
   | 'LOAD_ENGAGEMENT_STATE'
   | 'SAVE_PERSONALITY_PREF'
   | 'LOAD_PERSONALITY_PREF'
-  | 'GET_FULL_SESSION_STATE';
+  | 'GET_FULL_SESSION_STATE'
+  // ── Monetization & Credits ──────────────────────────────
+  | 'GET_USER_CREDITS'
+  | 'ADD_CREDITS'
+  | 'DEDUCT_CREDITS'
+  | 'CHECK_CREDIT_BALANCE'
+  | 'CREATE_CHECKOUT_SESSION'
+  | 'HANDLE_PAYMENT_SUCCESS'
+  | 'GET_SUBSCRIPTION_STATUS'
+  // ── Learning System ──────────────────────────────────────
+  | 'GET_AVAILABLE_LESSONS'
+  | 'START_LESSON'
+  | 'SUBMIT_ANSWER'
+  | 'EVALUATE_ANSWER'
+  | 'GENERATE_LESSON'
+  | 'GET_LESSON_PROGRESS'
+  // ── Analytics ────────────────────────────────────────────
+  | 'TRACK_EVENT'
+  | 'GET_ANALYTICS'
+  | 'GET_CHILD_ANALYTICS'
+  // ── Animation ────────────────────────────────────────────
+  | 'TRIGGER_ANIMATION'
+  | 'TRIGGER_CONFETTI'
+  | 'TRIGGER_CELEBRATION'
+  | 'TRIGGER_ENCOURAGEMENT';
 
 export interface IntentPayload<T = Record<string, unknown>> {
   intent: IntentType;
