@@ -53,7 +53,7 @@ async function callSunoAPI(
       body: JSON.stringify({
         prompt: prompt,
         tags: `children, ${style}, age ${childAge}, playful, instrumental`,
-        title: `MusicBuddy AI Song ${Date.now()}`,
+        title: `Music Buddy Song ${Date.now()}`,
         make_instrumental: false,
         wait_audio: false,
       })
@@ -75,7 +75,7 @@ async function callSunoAPI(
       if (song?.status === 'complete' && song?.audio_url) {
         return {
           audio_url: song.audio_url,
-          title: song.title ?? 'MusicBuddy AI Song',
+          title: song.title ?? 'Music Buddy Song',
           duration: song.duration ?? 25
         };
       }

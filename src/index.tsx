@@ -181,7 +181,7 @@ function getMainHTML(): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🎵 MusicBuddy AI – Children's Music Companion</title>
+  <title>🎵 Music Buddy – Children's Music Companion</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -580,7 +580,7 @@ function getMainHTML(): string {
   <div class="auth-card bounce-in">
     <div class="text-center mb-8">
       <div class="text-6xl mb-3">🎵</div>
-      <h1 class="text-3xl font-black text-white">MusicBuddy AI</h1>
+      <h1 class="text-3xl font-black text-white">Music Buddy</h1>
       <p class="text-purple-300 text-sm mt-1">Children's Interactive Music Companion</p>
     </div>
     <div class="glass p-6">
@@ -822,7 +822,7 @@ function getMainHTML(): string {
     <div class="flex items-center gap-3">
       <div class="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-xl animate-bounce">🎵</div>
       <div>
-        <h1 class="text-xl font-black text-white leading-tight">MusicBuddy AI</h1>
+        <h1 class="text-xl font-black text-white leading-tight">Music Buddy</h1>
         <p class="text-xs text-purple-300 font-semibold">Interactive Children's Music Companion</p>
       </div>
     </div>
@@ -2998,7 +2998,7 @@ async function saveCreatorSong() {
 function shareCreatorSong() {
   const song = STATE.creatorSong;
   if (!song) return;
-  const text = \`🎵 Check out my MusicBuddy AI song: "\${song.title}"\\n\${song.lyrics.split('\\n').slice(0,2).join('\\n')}\`;
+  const text = \`🎵 Check out my Music Buddy song: "\${song.title}"\\n\${song.lyrics.split('\\n').slice(0,2).join('\\n')}\`;
   if (navigator.share) {
     navigator.share({ title: song.title, text }).catch(() => {});
   } else {
@@ -8595,7 +8595,7 @@ function getDemoHTML(): string {
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>🎵 MusicBuddy AI — Try It Free</title>
+  <title>🎵 Music Buddy — Try It Free</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet"/>
   <style>
@@ -8668,7 +8668,7 @@ function getDemoHTML(): string {
     <div class="text-center mb-8">
       <div class="text-5xl mb-3 pulse">🎵</div>
       <h1 class="text-3xl font-black mb-2" style="background:linear-gradient(135deg,#ff6b9d,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent">
-        MusicBuddy AI
+        Music Buddy
       </h1>
       <p class="text-gray-400 text-sm">Try our ElevenLabs-quality voice — no account needed</p>
       <div class="inline-flex items-center gap-2 mt-3 px-4 py-1.5 rounded-full text-xs font-bold"

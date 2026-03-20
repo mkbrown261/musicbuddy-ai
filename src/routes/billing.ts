@@ -226,7 +226,7 @@ billing.post('/checkout', async (c) => {
         price_data: {
           currency: 'usd',
           unit_amount: pack.price_cents,
-          product_data: { name: `MusicBuddy AI — ${pack.label}`, description: `${pack.credits} credits for songs and lessons` },
+          product_data: { name: `Music Buddy — ${pack.label}`, description: `${pack.credits} credits for songs and lessons` },
         },
         quantity: 1,
       }];

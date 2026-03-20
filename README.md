@@ -1,4 +1,4 @@
-# MusicBuddy AI — Full AI Child Platform
+# Music Buddy — Full AI Child Platform
 
 ## 🌐 Live URLs
 - **Production**: https://musicbuddy-ai.pages.dev
