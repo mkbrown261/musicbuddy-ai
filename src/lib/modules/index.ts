@@ -13,6 +13,7 @@ import { BehaviorLoopModule } from './behavior-loop';
 import { FreeFeaturesModule } from './free-features';
 import { BillingKeysModule } from './billing-keys';
 import { GroqBehaviorModule } from './groq-behavior';
+import { AdaptiveChildModule } from './adaptive-child';
 
 export function bootstrapModules(): void {
   router.register(new SongLibraryModule());
@@ -22,7 +23,8 @@ export function bootstrapModules(): void {
   router.register(new FreeFeaturesModule());
   router.register(new BillingKeysModule());
   router.register(new GroqBehaviorModule());
-  console.log('[ModuleRegistry] All 7 modules registered with IntentRouter (incl. Groq Behavior Engine)');
+  router.register(new AdaptiveChildModule());
+  console.log('[ModuleRegistry] All 8 modules registered with IntentRouter (incl. Adaptive Child Engine)');
 }
 
 // Re-export router and modules for convenience
@@ -36,3 +38,4 @@ export { BehaviorLoopModule } from './behavior-loop';
 export { FreeFeaturesModule, FEATURE_REGISTRY } from './free-features';
 export { BillingKeysModule, PLANS } from './billing-keys';
 export { GroqBehaviorModule } from './groq-behavior';
+export { AdaptiveChildModule, AGE_PROFILES, PERSONALITIES, EMOTION_CONFIGS, GAME_DEFINITIONS, USAGE_LIMITS, getAgeGroup } from './adaptive-child';

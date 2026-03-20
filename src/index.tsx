@@ -411,6 +411,23 @@ function getMainHTML(): string {
     }
 
     /* Mini-game area */
+    /* ── Personality & emotion buttons ── */
+    .pers-btn {
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .pers-btn:hover { transform: scale(1.05); }
+    .pers-btn:active { transform: scale(0.95); }
+
+    /* Voice picker */
+    .vp-tab { cursor: pointer; transition: all 0.18s; }
+    .vp-tab:hover { opacity: 0.85; }
+    .eleven-voice-btn { cursor: pointer; transition: all 0.15s; }
+    .eleven-voice-btn:hover { transform: translateY(-1px); opacity: 0.9; }
+    .openai-voice-btn { cursor: pointer; transition: all 0.15s; }
+    .openai-voice-btn:hover { transform: translateY(-1px); opacity: 0.9; }
+    .char-voice-btn { cursor: pointer; transition: all 0.18s; }
+    .char-voice-btn:hover { transform: translateY(-2px); }
+
     .minigame-btn {
       background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2);
       border-radius: 16px; padding: 14px 20px; font-weight: 900; font-size: 1.1rem;
@@ -557,6 +574,31 @@ function getMainHTML(): string {
       <div class="text-xs text-gray-400">Score: <span id="mgScore" class="font-black text-yellow-400">0</span></div>
       <div class="text-xs text-gray-400">Round: <span id="mgRound" class="font-black text-pink-400">1</span>/3</div>
     </div>
+  </div>
+</div>
+
+<!-- ═══ USAGE LIMIT PAYWALL MODAL ═══ -->
+<div id="usageLimitModal" style="display:none;position:fixed;inset:0;z-index:10002;align-items:center;justify-content:center;background:rgba(0,0,0,0.88);backdrop-filter:blur(16px)">
+  <div class="glass max-w-sm w-full mx-4 p-6 text-center" style="border:2px solid rgba(255,107,157,0.4)">
+    <div class="text-5xl mb-3" id="usageLimitEmoji">🎵</div>
+    <h2 class="font-black text-xl mb-1" id="usageLimitTitle">Daily Limit Reached</h2>
+    <p class="text-gray-400 text-sm mb-4" id="usageLimitMsg">You've used all your free songs for today. Upgrade to keep playing!</p>
+    <div class="space-y-2 mb-5">
+      <div class="flex items-center justify-between text-sm bg-white bg-opacity-5 rounded-xl px-4 py-2">
+        <span>🎵 Songs today</span><span id="usageLimitDetail" class="font-bold text-pink-400">5 / 5</span>
+      </div>
+      <div class="flex items-center justify-between text-sm bg-white bg-opacity-5 rounded-xl px-4 py-2">
+        <span>🎮 Games</span><span class="font-bold text-green-400">Unlimited ✓</span>
+      </div>
+      <div class="flex items-center justify-between text-sm bg-white bg-opacity-5 rounded-xl px-4 py-2">
+        <span>🎙️ Premium Voice</span><span id="usagePremiumDetail" class="font-bold text-yellow-400">5 / 5</span>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <button onclick="closeUsageLimitModal()" class="btn-secondary text-sm">Keep Playing (Games Free)</button>
+      <button onclick="closeUsageLimitModal();BILLING.openModal('songs')" class="btn-primary text-sm">Upgrade ✨</button>
+    </div>
+    <p class="text-xs text-gray-600 mt-3">Resets at midnight · Games always free</p>
   </div>
 </div>
 
@@ -803,37 +845,53 @@ function getMainHTML(): string {
                 <i class="fas fa-stop mr-1"></i> Stop
               </button>
             </div>
-            <!-- Mini-games SPOTLIGHT — always visible, always free, no session needed -->
-            <div class="mt-3" style="border:2px solid rgba(255,200,50,0.4);border-radius:16px;background:rgba(255,200,50,0.05);padding:10px">
+            <!-- Age-Adaptive Games Panel — always visible, always free -->
+            <div class="mt-3" id="ageGamesPanel" style="border:2px solid rgba(255,200,50,0.4);border-radius:16px;background:rgba(255,200,50,0.05);padding:10px">
               <div class="flex items-center justify-between mb-2">
-                <div class="text-xs font-black text-yellow-300 flex items-center gap-1">
-                  <i class="fas fa-gamepad text-yellow-400"></i> 
-                  PLAY NOW — Always Free!
+                <div class="text-xs font-black text-yellow-300 flex items-center gap-2">
+                  <i class="fas fa-gamepad text-yellow-400"></i>
+                  <span id="ageGamesLabel">PLAY NOW — Always Free!</span>
                 </div>
-                <span class="text-xs bg-green-600 text-white font-black px-2 py-0.5 rounded-full" style="animation:pulse 1.5s ease-in-out infinite">✓ FREE</span>
+                <div class="flex items-center gap-1">
+                  <span id="ageGroupBadge" class="text-xs bg-blue-700 text-white font-black px-2 py-0.5 rounded-full hidden"></span>
+                  <span class="text-xs bg-green-600 text-white font-black px-2 py-0.5 rounded-full" style="animation:pulse 1.5s ease-in-out infinite">✓ FREE</span>
+                </div>
               </div>
-              <div class="grid grid-cols-3 gap-2">
+              <!-- Dynamic game buttons — rendered by renderAgeGames() -->
+              <div class="grid grid-cols-3 gap-2" id="ageGameButtons">
+                <!-- Default (toddler) games shown before profile is selected -->
                 <button onclick="startMiniGame('repeat')" class="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 font-black text-xs transition-all active:scale-95 hover:scale-105" style="background:linear-gradient(135deg,#6c3fc4,#9d4edd);border:2px solid rgba(255,255,255,0.2)">
-                  <span class="text-2xl">🎤</span>
-                  <span>Repeat</span>
+                  <span class="text-2xl">🎤</span><span>Repeat</span>
                   <span class="text-purple-300 font-normal" style="font-size:9px">Echo back!</span>
                 </button>
                 <button onclick="startMiniGame('clap')" class="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 font-black text-xs transition-all active:scale-95 hover:scale-105" style="background:linear-gradient(135deg,#c4503f,#e86c4d);border:2px solid rgba(255,255,255,0.2)">
-                  <span class="text-2xl">👏</span>
-                  <span>Clap!</span>
+                  <span class="text-2xl">👏</span><span>Clap!</span>
                   <span class="text-orange-200 font-normal" style="font-size:9px">Tap the beat</span>
                 </button>
                 <button onclick="startMiniGame('rhythm')" class="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 font-black text-xs transition-all active:scale-95 hover:scale-105" style="background:linear-gradient(135deg,#2d6a4f,#40916c);border:2px solid rgba(255,255,255,0.2)">
-                  <span class="text-2xl">🥁</span>
-                  <span>Rhythm</span>
+                  <span class="text-2xl">🥁</span><span>Rhythm</span>
                   <span class="text-green-200 font-normal" style="font-size:9px">Match it!</span>
                 </button>
               </div>
+              <!-- Always-visible Call & Response -->
               <button onclick="startCallAndResponse()" class="mt-2 w-full flex items-center justify-center gap-2 rounded-2xl py-3 font-black text-sm transition-all active:scale-95 hover:scale-105" style="background:linear-gradient(135deg,#f4a261,#e76f51);border:2px solid rgba(255,255,255,0.25)">
-                <span class="text-xl">🎵</span> 
+                <span class="text-xl">🎵</span>
                 <span>Call &amp; Response — Sing with me!</span>
               </button>
-              <p class="text-center text-xs text-gray-500 mt-2">Tap any game to start instantly · No setup needed</p>
+              <!-- 4th and 5th games (collapsed by default, expanded for age) -->
+              <div id="bonusGameButtons" class="grid grid-cols-2 gap-2 mt-2 hidden"></div>
+              <p class="text-center text-xs text-gray-500 mt-2" id="ageGamesHint">Tap any game to start instantly · No setup needed</p>
+            </div>
+
+            <!-- Usage Limit Bar -->
+            <div class="mt-2" id="usageLimitBar" style="display:none">
+              <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+                <span id="usageLimitLabel">Daily Songs</span>
+                <span id="usageLimitCount">0 / 5</span>
+              </div>
+              <div class="h-1.5 rounded-full bg-white bg-opacity-10">
+                <div id="usageLimitFill" class="h-full rounded-full transition-all" style="width:0%;background:linear-gradient(90deg,#6cbf7a,#4ade80)"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -1549,13 +1607,37 @@ function getMainHTML(): string {
           <span class="text-xs font-normal text-green-400 ml-auto px-2 py-1 rounded-full" style="background:rgba(0,200,100,0.15)" id="voiceEngineStatus">Loading...</span>
         </h3>
 
-        <!-- Character Voice Selector — Luna / Max / Bubbles -->
-        <div class="mb-5">
-          <label class="text-sm font-bold text-gray-300 block mb-3">
-            <i class="fas fa-star text-yellow-400 mr-1"></i> Choose Your Host Character
-          </label>
+        <!-- ══ FULL VOICE PICKER ══════════════════════════════════ -->
+
+        <!-- Per-child voice saved badge -->
+        <div id="childVoiceBadge" class="mb-3 hidden text-xs text-center py-1.5 rounded-xl font-bold"
+          style="background:rgba(74,222,128,0.15);color:#4ade80">
+          <i class="fas fa-child mr-1"></i>
+          <span id="childVoiceBadgeText">Voice saved for this child</span>
+        </div>
+
+        <!-- Tab bar: Characters | ElevenLabs | OpenAI -->
+        <div class="flex gap-1 mb-3 p-1 rounded-xl" style="background:rgba(255,255,255,0.05)">
+          <button id="vpTab-chars" onclick="VOICE_PICKER.switchTab('chars')"
+            class="vp-tab flex-1 text-xs font-bold py-1.5 rounded-lg transition-all"
+            style="background:#ff6b9d;color:#fff">
+            ⭐ Characters
+          </button>
+          <button id="vpTab-eleven" onclick="VOICE_PICKER.switchTab('eleven')"
+            class="vp-tab flex-1 text-xs font-bold py-1.5 rounded-lg transition-all"
+            style="background:transparent;color:#aaa">
+            🎙 ElevenLabs
+          </button>
+          <button id="vpTab-openai" onclick="VOICE_PICKER.switchTab('openai')"
+            class="vp-tab flex-1 text-xs font-bold py-1.5 rounded-lg transition-all"
+            style="background:transparent;color:#aaa">
+            🤖 OpenAI
+          </button>
+        </div>
+
+        <!-- Tab: Characters -->
+        <div id="vpPanel-chars" class="vp-panel mb-4">
           <div class="grid grid-cols-3 gap-2">
-            <!-- Luna: warm female default -->
             <button id="charLuna" onclick="setCharacterVoice('luna')"
               class="char-voice-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 transition-all"
               style="border-color:#ff6b9d;background:rgba(255,107,157,0.15)">
@@ -1563,7 +1645,6 @@ function getMainHTML(): string {
               <span class="font-black text-xs">Luna</span>
               <span class="text-xs text-gray-400">Warm &amp; kind</span>
             </button>
-            <!-- Max: friendly energetic male -->
             <button id="charMax" onclick="setCharacterVoice('max')"
               class="char-voice-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 transition-all"
               style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
@@ -1571,7 +1652,6 @@ function getMainHTML(): string {
               <span class="font-black text-xs">Max</span>
               <span class="text-xs text-gray-400">Fun &amp; bold</span>
             </button>
-            <!-- Bubbles: playful female upbeat -->
             <button id="charBubbles" onclick="setCharacterVoice('bubbles')"
               class="char-voice-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 transition-all"
               style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
@@ -1580,38 +1660,63 @@ function getMainHTML(): string {
               <span class="text-xs text-gray-400">Silly &amp; bright</span>
             </button>
           </div>
-          <!-- Selected character info -->
+          <!-- Style sub-picker for Characters -->
+          <div class="mt-3">
+            <div class="text-xs text-gray-400 mb-2 font-bold">Personality Style</div>
+            <div class="grid grid-cols-4 gap-1">
+              <button onclick="setVoiceStyle('default')" id="vstyle-default"
+                class="vstyle-btn text-xs py-1.5 px-2 rounded-lg border transition-all font-bold"
+                style="border-color:#ff6b9d;background:rgba(255,107,157,0.15)">⭐ Warm</button>
+              <button onclick="setVoiceStyle('playful')" id="vstyle-playful"
+                class="vstyle-btn text-xs py-1.5 px-2 rounded-lg border transition-all font-bold"
+                style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">🎈 Play</button>
+              <button onclick="setVoiceStyle('energetic')" id="vstyle-energetic"
+                class="vstyle-btn text-xs py-1.5 px-2 rounded-lg border transition-all font-bold"
+                style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">⚡ Energy</button>
+              <button onclick="setVoiceStyle('soothing')" id="vstyle-soothing"
+                class="vstyle-btn text-xs py-1.5 px-2 rounded-lg border transition-all font-bold"
+                style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">🌙 Calm</button>
+            </div>
+          </div>
           <div id="selectedCharInfo" class="mt-2 text-center text-xs text-purple-300 py-1 rounded-lg"
             style="background:rgba(168,85,247,0.1)">
             🌙 Luna — Warm female host (Rachel voice)
           </div>
         </div>
 
-        <!-- Voice Style -->
-        <div class="mb-5">
-          <label class="text-sm font-bold text-gray-300 block mb-3">Voice Personality Style</label>
-          <div class="grid grid-cols-2 gap-2">
-            <button onclick="setVoiceStyle('default')" id="vstyle-default"
-              class="vstyle-btn text-sm py-2 px-3 rounded-xl border-2 transition-all font-bold"
-              style="border-color:#ff6b9d;background:rgba(255,107,157,0.15)">
-              ⭐ Default (Warm)
-            </button>
-            <button onclick="setVoiceStyle('playful')" id="vstyle-playful"
-              class="vstyle-btn text-sm py-2 px-3 rounded-xl border-2 transition-all font-bold"
-              style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
-              🎈 Playful
-            </button>
-            <button onclick="setVoiceStyle('energetic')" id="vstyle-energetic"
-              class="vstyle-btn text-sm py-2 px-3 rounded-xl border-2 transition-all font-bold"
-              style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
-              ⚡ Energetic
-            </button>
-            <button onclick="setVoiceStyle('soothing')" id="vstyle-soothing"
-              class="vstyle-btn text-sm py-2 px-3 rounded-xl border-2 transition-all font-bold"
-              style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
-              🌙 Soothing
-            </button>
+        <!-- Tab: ElevenLabs voices -->
+        <div id="vpPanel-eleven" class="vp-panel mb-4 hidden">
+          <div class="text-xs text-gray-500 mb-3">All ElevenLabs voices — click to select. Requires ElevenLabs API key for full quality.</div>
+          <!-- Female voices -->
+          <div class="text-xs font-bold text-pink-400 mb-1.5">♀ Female</div>
+          <div class="grid grid-cols-2 gap-1.5 mb-3" id="vpElevenFemale">
+            <!-- Rendered by VOICE_PICKER.renderElevenLabs() -->
           </div>
+          <!-- Male voices -->
+          <div class="text-xs font-bold text-blue-400 mb-1.5">♂ Male</div>
+          <div class="grid grid-cols-2 gap-1.5" id="vpElevenMale">
+            <!-- Rendered by VOICE_PICKER.renderElevenLabs() -->
+          </div>
+        </div>
+
+        <!-- Tab: OpenAI voices -->
+        <div id="vpPanel-openai" class="vp-panel mb-4 hidden">
+          <div class="text-xs text-gray-500 mb-3">OpenAI TTS voices — free with OpenAI API key.</div>
+          <div class="grid grid-cols-2 gap-1.5" id="vpOpenAI">
+            <!-- Rendered by VOICE_PICKER.renderOpenAI() -->
+          </div>
+        </div>
+
+        <!-- Active voice display -->
+        <div id="activeVoiceBar" class="mb-4 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold"
+          style="background:rgba(255,107,157,0.12);border:1px solid rgba(255,107,157,0.3)">
+          <span class="text-lg" id="activeVoiceEmoji">🌙</span>
+          <div class="flex-1 min-w-0">
+            <div id="activeVoiceName" class="truncate">Luna</div>
+            <div id="activeVoiceDesc" class="text-gray-400 font-normal truncate">Warm female host (Rachel)</div>
+          </div>
+          <span id="activeVoiceProvider" class="text-xs px-2 py-0.5 rounded-full"
+            style="background:rgba(168,85,247,0.2);color:#c084fc">ElevenLabs</span>
         </div>
 
         <!-- Expressiveness sliders -->
@@ -1687,7 +1792,54 @@ function getMainHTML(): string {
         </button>
       </div>
 
-      <div class="glass p-6">
+      <!-- ── Personality &amp; Emotion Engine Panel ────────────────── -->
+      <div class="glass p-5" id="personalityPanel">
+        <h3 class="font-black text-base mb-3 flex items-center gap-2">
+          <i class="fas fa-theater-masks text-purple-400"></i> Personality &amp; Emotion
+          <span id="currentEmotionBadge" class="text-xs font-normal ml-auto px-2 py-0.5 rounded-full bg-yellow-800 text-yellow-200">😊 Happy</span>
+        </h3>
+        <!-- Personality picker -->
+        <div class="mb-3">
+          <div class="text-xs font-bold text-gray-400 mb-2">HOST PERSONALITY</div>
+          <div class="grid grid-cols-5 gap-1" id="personalityPicker">
+            <button onclick="setPersonality('energetic')" id="pers-energetic" class="pers-btn flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border-2 transition-all text-xs font-bold" style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+              <span class="text-lg">⚡</span><span>Energetic</span>
+            </button>
+            <button onclick="setPersonality('calm')" id="pers-calm" class="pers-btn flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border-2 transition-all text-xs font-bold" style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+              <span class="text-lg">😌</span><span>Calm</span>
+            </button>
+            <button onclick="setPersonality('playful')" id="pers-playful" class="pers-btn flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border-2 transition-all text-xs font-bold" style="border-color:#ff6b9d;background:rgba(255,107,157,0.15)">
+              <span class="text-lg">🎉</span><span>Playful</span>
+            </button>
+            <button onclick="setPersonality('nurturing')" id="pers-nurturing" class="pers-btn flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border-2 transition-all text-xs font-bold" style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+              <span class="text-lg">💖</span><span>Nurturing</span>
+            </button>
+            <button onclick="setPersonality('teacher')" id="pers-teacher" class="pers-btn flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border-2 transition-all text-xs font-bold" style="border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+              <span class="text-lg">🎓</span><span>Teacher</span>
+            </button>
+          </div>
+          <div id="personalityHint" class="text-xs text-gray-500 mt-1.5 text-center">🎉 Silly and fun — uses jokes, rhymes, giggles</div>
+        </div>
+        <!-- Emotion state display -->
+        <div class="mb-3">
+          <div class="text-xs font-bold text-gray-400 mb-2">DETECTED EMOTION</div>
+          <div class="grid grid-cols-3 gap-1">
+            <div id="emo-happy" class="text-center py-1.5 rounded-lg border text-xs" style="border-color:rgba(255,255,255,0.1)">😊 Happy</div>
+            <div id="emo-excited" class="text-center py-1.5 rounded-lg border text-xs" style="border-color:rgba(255,255,255,0.1)">🤩 Excited</div>
+            <div id="emo-proud" class="text-center py-1.5 rounded-lg border text-xs" style="border-color:rgba(255,255,255,0.1)">🏆 Proud</div>
+            <div id="emo-encouraging" class="text-center py-1.5 rounded-lg border text-xs" style="border-color:rgba(255,255,255,0.1)">💪 Encouraging</div>
+            <div id="emo-concerned" class="text-center py-1.5 rounded-lg border text-xs" style="border-color:rgba(255,255,255,0.1)">🤔 Concerned</div>
+            <div id="emo-neutral" class="text-center py-1.5 rounded-lg border text-xs" style="border-color:rgba(255,255,255,0.1)">😐 Neutral</div>
+          </div>
+        </div>
+        <!-- Usage summary -->
+        <div id="usageSummaryPanel" class="mt-2">
+          <div class="text-xs font-bold text-gray-400 mb-2">USAGE TODAY</div>
+          <div class="space-y-1" id="usageSummaryList">
+            <!-- populated by renderUsageSummary() -->
+          </div>
+        </div>
+      </div>
         <h3 class="font-black text-lg mb-4 flex items-center gap-2">
           <i class="fas fa-volume-up text-blue-400"></i> Audio Settings
         </h3>
@@ -3825,6 +3977,16 @@ async function selectChild(id) {
   INTENT.getShared(ageGroup).then(shared => {
     if (shared) updateSharedIntelPanel(shared, ageGroup);
   });
+
+  // ── Load per-child voice settings (falls back to user-level if not set) ──
+  await loadVoiceSettings(r.data.child.id);
+  // Show per-child voice badge
+  if (typeof VOICE_PICKER !== 'undefined') {
+    VOICE_PICKER.showChildBadge(r.data.child.name);
+  }
+
+  // Load adaptive system for this child (age games, personality, emotion, usage)
+  ADAPTIVE.loadForChild(r.data.child);
 }
 
 function updateChildUI() {
@@ -3886,6 +4048,9 @@ async function startSession() {
   
   // Start auto-cycle if in auto mode
   if (STATE.mode === 'auto') startAutoCycle();
+
+  // Start engagement loop
+  startEngagementLoop();
 }
 
 async function stopSession() {
@@ -3902,6 +4067,9 @@ async function stopSession() {
   
   STATE.sessionActive = false;
   STATE.currentSession = null;
+
+  // Stop engagement loop
+  stopEngagementLoop();
 
   document.getElementById('startBtn').classList.remove('hidden');
   document.getElementById('stopBtn').classList.add('hidden');
@@ -4064,6 +4232,10 @@ async function triggerInteraction(trigger = 'manual') {
     }
 
     // ── Music generation ────────────────────────────────────
+    // Check daily song usage limit before generating
+    const songAllowed = await ADAPTIVE.checkUsageBeforeSong();
+    if (!songAllowed) { updateStateUI('idle', trigger); return; }
+
     updateStateUI('generating', trigger);
     let snippet;
 
@@ -4094,6 +4266,9 @@ async function triggerInteraction(trigger = 'manual') {
     STATE.lastInteractionTime = Date.now();
     STATE.consecutiveSongs++;
     GROQ_ENGINE._consecutiveSongs++;
+
+    // Track song usage (async, non-blocking)
+    ADAPTIVE.trackSongUsage().catch(() => {});
 
     // ── Update Groq loop state async ─────────────────────────
     if (STATE.currentSession) {
@@ -6242,6 +6417,616 @@ async function tryRestoreSession() {
 }
 
 // ============================================================
+// ADAPTIVE CHILD SYSTEM — Frontend Controller
+// Connects to Intent Layer for all age/personality/emotion logic.
+// All state persists to DB via /api/intent endpoints.
+//
+// Flow: child selected → GET_FULL_SESSION_STATE
+//   → render age-adaptive games, personality picker, emotion state
+//   → on each engagement event: UPDATE_EMOTION_STATE → SAVE_ENGAGEMENT_STATE
+//   → on song generation: CHECK_USAGE_LIMIT → TRACK_USAGE
+// ============================================================
+
+// ── Adaptive State ────────────────────────────────────────────
+const ADAPTIVE = {
+  personality:  'playful',    // energetic|calm|playful|nurturing|teacher
+  emotion:      'neutral',    // happy|excited|proud|encouraging|concerned|neutral
+  ageGroup:     'toddler',    // infant|toddler|early_learning|advanced
+  ageProfile:   null,         // full profile from Intent Layer
+  games:        [],           // age-appropriate games
+  loaded:       false,
+  _saveTimer:   null,
+
+  // ── Intent Layer helpers ──────────────────────────────────
+  async intent(intentName, data) {
+    const user = AUTH.getUser();
+    const child = STATE.selectedChild;
+    try {
+      const res = await fetch('/api/intent', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          intent: intentName,
+          userId:  user?.id?.toString() ?? 'demo',
+          childId: child?.id ?? undefined,
+          data:    data || {},
+        }),
+      });
+      return await res.json();
+    } catch(e) {
+      console.warn('[ADAPTIVE] intent error:', intentName, e);
+      return { success: false, error: e.message };
+    }
+  },
+
+  // ── Load full session state on child select ───────────────
+  async loadForChild(child) {
+    if (!child) return;
+    try {
+      const r = await this.intent('GET_FULL_SESSION_STATE', {});
+      if (r.success && r.data) {
+        const d = r.data;
+        this.personality = d.personality ?? 'playful';
+        if (d.engagementState?.found) {
+          this.emotion = d.engagementState.emotion ?? 'neutral';
+          STATE.smileCount     = d.engagementState.smileCount ?? 0;
+          STATE.laughCount     = d.engagementState.laughCount ?? 0;
+          STATE.attentionLoss  = d.engagementState.attentionLoss ?? 0;
+          STATE.engScore       = d.engagementState.engScore ?? 0;
+        }
+      }
+    } catch(e) { console.warn('[ADAPTIVE] loadForChild error', e); }
+
+    await this.loadAgeGames(child.age);
+    this.renderPersonalityPicker();
+    this.renderEmotionState();
+    this.renderUsageSummary();
+    this.loaded = true;
+  },
+
+  // ── Load age-appropriate games via Intent Layer ───────────
+  async loadAgeGames(age) {
+    try {
+      const r = await this.intent('GET_AGE_GAMES', { age: age ?? 5 });
+      if (r.success && r.data) {
+        this.ageGroup  = r.data.ageGroup;
+        this.ageProfile = r.data;
+        this.games      = r.data.games ?? [];
+        this.renderAgeGames(r.data);
+        return;
+      }
+    } catch(e) { console.warn('[ADAPTIVE] loadAgeGames error', e); }
+    // fallback: keep defaults
+    this.renderAgeGames(null);
+  },
+
+  // ── Render age-adaptive game buttons ─────────────────────
+  renderAgeGames(data) {
+    const container = document.getElementById('ageGameButtons');
+    const bonusContainer = document.getElementById('bonusGameButtons');
+    const badge = document.getElementById('ageGroupBadge');
+    const label = document.getElementById('ageGamesLabel');
+    const hint  = document.getElementById('ageGamesHint');
+    if (!container) return;
+
+    const GAME_COLORS = [
+      'linear-gradient(135deg,#6c3fc4,#9d4edd)',
+      'linear-gradient(135deg,#c4503f,#e86c4d)',
+      'linear-gradient(135deg,#2d6a4f,#40916c)',
+      'linear-gradient(135deg,#1a4e8c,#2d7dd2)',
+      'linear-gradient(135deg,#7b2d8b,#c44dce)',
+    ];
+
+    if (!data || !data.games || !data.games.length) {
+      // Fallback to hardcoded toddler defaults
+      return;
+    }
+
+    const games = data.games;
+    const ageGroupLabels = {
+      infant: 'Baby (0-2)', toddler: 'Toddler (3-5)',
+      early_learning: 'Ages 6-8', advanced: 'Ages 9+'
+    };
+
+    if (badge) { badge.textContent = ageGroupLabels[data.ageGroup] || data.ageLabel; badge.classList.remove('hidden'); }
+    if (label) label.textContent = 'AGE GAMES — ' + (ageGroupLabels[data.ageGroup] || '');
+    if (hint)  hint.textContent  = games.length + ' free games for ' + (ageGroupLabels[data.ageGroup] || 'this age') + ' · Tap to start!';
+
+    // Map game ids to existing minigame types where possible
+    const GAME_TO_MINIGAME = {
+      repeat_after_me: 'repeat', counting_game: 'repeat',
+      call_response: 'callresponse', clap_game: 'clap',
+      animal_sounds: 'repeat', simple_matching: 'clap',
+      math_mini: 'rhythm', spelling_game: 'repeat',
+      pattern_match: 'rhythm', memory_cards: 'clap',
+      rhythm_match: 'rhythm', peekaboo: 'peekaboo',
+      sound_imitation: 'soundimitation', color_flash: 'colorflash',
+      gentle_bounce: 'gentlebounce', music_quiz: 'musicquiz',
+      logic_rhythm: 'rhythm', story_song: 'storysong',
+      beat_maker: 'clap', lyric_fill: 'lyricfill',
+    };
+
+    // First 3 games in main grid
+    const mainGames = games.slice(0, 3);
+    const extraGames = games.slice(3);
+
+    // Build game buttons using DOM (avoid quote-escaping issues in template literal)
+    function _makeGameBtn(g, type, color, extraClass) {
+      var btn = document.createElement("button");
+      btn.className = (extraClass || "flex flex-col items-center gap-1 rounded-2xl py-3 px-1") + " font-black text-xs transition-all active:scale-95 hover:scale-105";
+      btn.setAttribute("style", "background:" + color + ";border:2px solid rgba(255,255,255,0.2)");
+      (function(id, t) { btn.addEventListener("click", function() { launchAdaptiveGame(id, t); }); })(g.id, type);
+      var emoSpan = document.createElement("span");
+      emoSpan.className = (extraClass ? "text-xl" : "text-2xl");
+      emoSpan.textContent = g.emoji;
+      var lblSpan = document.createElement("span");
+      lblSpan.textContent = g.label.split("!")[0].slice(0, extraClass ? 12 : 10);
+      btn.appendChild(emoSpan);
+      btn.appendChild(lblSpan);
+      if (!extraClass) {
+        var descSpan = document.createElement("span");
+        descSpan.setAttribute("style", "font-size:9px;opacity:0.8");
+        descSpan.textContent = (g.description || "").slice(0, 16);
+        btn.appendChild(descSpan);
+      }
+      return btn;
+    }
+    container.innerHTML = "";
+    mainGames.forEach(function(g, i) {
+      var type = GAME_TO_MINIGAME[g.id] || "clap";
+      var color = GAME_COLORS[i % GAME_COLORS.length];
+      container.appendChild(_makeGameBtn(g, type, color, null));
+    });
+
+    // 4th and 5th games in bonus row
+    if (bonusContainer && extraGames.length > 0) {
+      bonusContainer.innerHTML = "";
+      extraGames.forEach(function(g, i) {
+        var type = GAME_TO_MINIGAME[g.id] || "clap";
+        var color = GAME_COLORS[(i + 3) % GAME_COLORS.length];
+        bonusContainer.appendChild(_makeGameBtn(g, type, color, "flex flex-col items-center gap-1 rounded-2xl py-2 px-2"));
+      });
+      bonusContainer.classList.remove("hidden");
+    }
+  },
+
+  // ── Set personality (persists via Intent Layer) ───────────
+  async setPersonality(type) {
+    this.personality = type;
+    this.renderPersonalityPicker();
+    const r = await this.intent('SAVE_PERSONALITY_PREF', { personality: type });
+    if (r.success) showToast('Personality set to ' + type + '!', '🎭', 'success');
+  },
+
+  // ── Render personality picker UI ─────────────────────────
+  renderPersonalityPicker() {
+    const PERSONALITY_HINTS = {
+      energetic:  '⚡ Explosive energy — caps, triple exclamation, WOW!',
+      calm:       '😌 Gentle, slow, soft — reassuring and nurturing',
+      playful:    '🎉 Silly and fun — jokes, rhymes, giggles',
+      nurturing:  '💖 Warm and loving — supportive, "sweetheart"',
+      teacher:    '🎓 Guided learning — questions, specific praise',
+    };
+    const active = this.personality;
+    ['energetic','calm','playful','nurturing','teacher'].forEach(function(p) {
+      const btn = document.getElementById('pers-' + p);
+      if (!btn) return;
+      if (p === active) {
+        btn.style.borderColor = '#ff6b9d';
+        btn.style.background  = 'rgba(255,107,157,0.2)';
+      } else {
+        btn.style.borderColor = 'rgba(255,255,255,0.1)';
+        btn.style.background  = 'rgba(255,255,255,0.03)';
+      }
+    });
+    const hint = document.getElementById('personalityHint');
+    if (hint) hint.textContent = PERSONALITY_HINTS[active] || '';
+
+    // Update emotion badge too
+    const badge = document.getElementById('currentEmotionBadge');
+    if (badge) {
+      const EMOTION_DISPLAY = {
+        happy: '😊 Happy', excited: '🤩 Excited', proud: '🏆 Proud',
+        encouraging: '💪 Go!', concerned: '🤔 Quiet', neutral: '😐 Neutral',
+      };
+      badge.textContent = EMOTION_DISPLAY[this.emotion] || '😊';
+    }
+  },
+
+  // ── Update emotion state from engagement metrics ──────────
+  async updateEmotion(metrics) {
+    const r = await this.intent('UPDATE_EMOTION_STATE', metrics);
+    if (r.success && r.data) {
+      const prev = this.emotion;
+      this.emotion = r.data.emotionState ?? 'neutral';
+      if (prev !== this.emotion) {
+        this.renderEmotionState();
+        STATE.lastDetectedEmotion = this.emotion;
+        this.scheduleSaveState();
+      }
+    }
+  },
+
+  // ── Render emotion state UI ───────────────────────────────
+  renderEmotionState() {
+    const EMOTION_IDS = ['happy','excited','proud','encouraging','concerned','neutral'];
+    const active = this.emotion;
+    EMOTION_IDS.forEach(function(e) {
+      const el = document.getElementById('emo-' + e);
+      if (!el) return;
+      if (e === active) {
+        el.style.borderColor = '#ff6b9d';
+        el.style.background  = 'rgba(255,107,157,0.15)';
+        el.style.color       = '#fff';
+        el.style.fontWeight  = '700';
+      } else {
+        el.style.borderColor = 'rgba(255,255,255,0.1)';
+        el.style.background  = 'transparent';
+        el.style.color       = '';
+        el.style.fontWeight  = '';
+      }
+    });
+    // Sync badge
+    this.renderPersonalityPicker();
+  },
+
+  // ── Usage summary render ──────────────────────────────────
+  async renderUsageSummary() {
+    try {
+      const r = await this.intent('GET_USAGE_SUMMARY', {});
+      if (!r.success || !r.data?.summary) return;
+      const list = document.getElementById('usageSummaryList');
+      if (!list) return;
+      const LABELS = {
+        songs_per_day:  { emoji: '🎵', label: 'Songs today' },
+        premium_voice:  { emoji: '🎙️', label: 'Premium voice' },
+        tts_basic:      { emoji: '🔊', label: 'Basic TTS' },
+        games_free:     { emoji: '🎮', label: 'Games' },
+        ai_behavior:    { emoji: '🧠', label: 'AI decisions' },
+      };
+      const html = Object.entries(r.data.summary).map(function([id, s]) {
+        const meta = LABELS[id] || { emoji: '•', label: id };
+        if (s.unlimited) {
+          return '<div class="flex items-center justify-between text-xs">'
+            + '<span>' + meta.emoji + ' ' + meta.label + '</span>'
+            + '<span class="text-green-400 font-bold">∞ Free</span></div>';
+        }
+        const pct = Math.min(100, Math.round((s.used / s.limit) * 100));
+        const color = pct >= 100 ? '#f87171' : pct >= 80 ? '#fbbf24' : '#4ade80';
+        return '<div class="mb-1">'
+          + '<div class="flex items-center justify-between text-xs mb-0.5">'
+          + '<span>' + meta.emoji + ' ' + meta.label + '</span>'
+          + '<span style="color:' + color + '">' + s.used + ' / ' + s.limit + '</span></div>'
+          + '<div class="h-1 rounded-full bg-white bg-opacity-10">'
+          + '<div class="h-full rounded-full transition-all" style="width:' + pct + '%;background:' + color + '"></div></div></div>';
+      }).join('');
+      list.innerHTML = html;
+
+      // Also update usage bar in game panel
+      this.updateUsageBar(r.data.summary);
+    } catch(e) { console.warn('[ADAPTIVE] renderUsageSummary error', e); }
+  },
+
+  updateUsageBar(summary) {
+    const bar  = document.getElementById('usageLimitBar');
+    const fill = document.getElementById('usageLimitFill');
+    const lbl  = document.getElementById('usageLimitLabel');
+    const cnt  = document.getElementById('usageLimitCount');
+    if (!bar || !summary) return;
+    const songs = summary['songs_per_day'];
+    if (!songs || songs.unlimited) { bar.style.display = 'none'; return; }
+    bar.style.display = 'block';
+    if (lbl) lbl.textContent = '🎵 Daily Songs';
+    if (cnt) cnt.textContent = songs.used + ' / ' + songs.limit;
+    const pct = Math.min(100, Math.round((songs.used / songs.limit) * 100));
+    const color = pct >= 100 ? '#f87171' : pct >= 80 ? '#fbbf24' : '#4ade80';
+    if (fill) { fill.style.width = pct + '%'; fill.style.background = 'linear-gradient(90deg,' + color + ',' + color + ')'; }
+  },
+
+  // ── Check usage limit before generating a song ────────────
+  async checkUsageBeforeSong() {
+    try {
+      const r = await this.intent('CHECK_USAGE_LIMIT', { featureId: 'songs_per_day' });
+      if (r.success && r.data) {
+        if (!r.data.allowed && !r.data.unlimited) {
+          showUsageLimitModal('songs_per_day', r.data);
+          return false;
+        }
+      }
+    } catch(e) { /* allow on error */ }
+    return true;
+  },
+
+  // ── Track usage after successful song ─────────────────────
+  async trackSongUsage() {
+    await this.intent('TRACK_USAGE', { featureId: 'songs_per_day' });
+    await this.renderUsageSummary();
+  },
+
+  // ── Check premium voice usage ─────────────────────────────
+  async checkPremiumVoice() {
+    try {
+      const r = await this.intent('CHECK_USAGE_LIMIT', { featureId: 'premium_voice' });
+      if (r.success && r.data && !r.data.allowed && !r.data.unlimited) {
+        return false;
+      }
+    } catch(e) { /* allow */ }
+    return true;
+  },
+
+  // ── Save engagement state (debounced, 10s) ────────────────
+  scheduleSaveState() {
+    clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => this.saveEngagementState(), 10000);
+  },
+
+  async saveEngagementState() {
+    await this.intent('SAVE_ENGAGEMENT_STATE', {
+      emotion:      this.emotion,
+      personality:  this.personality,
+      smileCount:   STATE.smileCount    || 0,
+      laughCount:   STATE.laughCount    || 0,
+      attentionLoss: STATE.attentionLoss || 0,
+      engScore:     STATE.engScore      || 0,
+      voiceDetected: false,
+      currentSong:  STATE.currentSnippet?.name || null,
+    });
+  },
+
+  // ── Engagement loop step (called every 15s during session) ─
+  async engagementLoopStep() {
+    if (!STATE.sessionActive) return;
+    const metrics = {
+      smileCount:    STATE.smileCount    || 0,
+      laughCount:    STATE.laughCount    || 0,
+      attentionLoss: STATE.attentionLoss || 0,
+      engScore:      STATE.engScore      || 0,
+      voiceDetected: false,
+    };
+    await this.updateEmotion(metrics);
+
+    // If concerned (attention loss), trigger an engagement response
+    if (this.emotion === 'concerned' && STATE.sessionActive) {
+      const child = STATE.selectedChild;
+      if (child && Date.now() - (this._lastEngageResponse || 0) > 60000) {
+        this._lastEngageResponse = Date.now();
+        const phrases = [
+          "Hey " + child.name + "! Are you still there? Let's play!",
+          child.name + ", guess what! I have a new game for you!",
+          "Oops, I think you might have walked away! Come back " + child.name + "!",
+          "Time for something new! Ready, " + child.name + "?",
+        ];
+        const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+        speakText(phrase);
+        STATE.attentionLoss = Math.max(0, STATE.attentionLoss - 1);
+      }
+    }
+
+    this.scheduleSaveState();
+  },
+};
+
+// ── Global setter called from personality picker buttons ─────
+function setPersonality(type) {
+  ADAPTIVE.setPersonality(type);
+}
+
+// ── Launch age-adaptive game ─────────────────────────────────
+function launchAdaptiveGame(gameId, legacyType) {
+  // For games that have new implementations, route to them
+  const NEW_GAME_HANDLERS = {
+    peekaboo:       startPeekabooGame,
+    sound_imitation: startSoundImitationGame,
+    color_flash:    startColorFlashGame,
+    gentle_bounce:  startGentleBounceGame,
+    counting_game:  startCountingGame,
+    animal_sounds:  startAnimalSoundsGame,
+    simple_matching: startSimpleMatchingGame,
+    math_mini:      startMathMiniGame,
+    spelling_game:  startSpellingGame,
+    pattern_match:  null,
+    memory_cards:   null,
+    music_quiz:     startMusicQuizGame,
+    logic_rhythm:   null,
+    story_song:     startStorySongGame,
+    beat_maker:     null,
+    lyric_fill:     startLyricFillGame,
+  };
+
+  const handler = NEW_GAME_HANDLERS[gameId];
+  if (handler) {
+    handler();
+    return;
+  }
+
+  // Fall back to existing minigame system
+  if (legacyType === 'callresponse') { startCallAndResponse(); return; }
+  startMiniGame(legacyType || 'clap');
+}
+
+// ── Show usage limit paywall ──────────────────────────────────
+function showUsageLimitModal(featureId, data) {
+  const modal = document.getElementById('usageLimitModal');
+  if (!modal) { BILLING.openModal(); return; }
+
+  const MESSAGES = {
+    songs_per_day: { title: 'Daily Song Limit Reached!', msg: "You've used all your free songs for today. Upgrade for unlimited songs!", emoji: '🎵' },
+    premium_voice: { title: 'Premium Voice Limit!', msg: "You've used your free premium voice uses. Upgrade for unlimited!", emoji: '🎙️' },
+    tts_basic:     { title: 'Voice Limit Reached!', msg: 'Daily voice limit reached. Upgrade for unlimited voice!', emoji: '🔊' },
+    ai_behavior:   { title: 'AI Limit Reached!', msg: 'Daily AI interactions used. Upgrade for unlimited AI!', emoji: '🧠' },
+  };
+
+  const m = MESSAGES[featureId] || MESSAGES.songs_per_day;
+  const titleEl = document.getElementById('usageLimitTitle');
+  const msgEl   = document.getElementById('usageLimitMsg');
+  const emojiEl = document.getElementById('usageLimitEmoji');
+  const detailEl = document.getElementById('usageLimitDetail');
+  const premEl  = document.getElementById('usagePremiumDetail');
+
+  if (titleEl) titleEl.textContent = m.title;
+  if (msgEl)   msgEl.textContent   = m.msg;
+  if (emojiEl) emojiEl.textContent = m.emoji;
+  if (detailEl && data) detailEl.textContent = data.used + ' / ' + data.limit;
+
+  modal.style.display = 'flex';
+}
+
+function closeUsageLimitModal() {
+  const modal = document.getElementById('usageLimitModal');
+  if (modal) modal.style.display = 'none';
+}
+
+// ── Age-adaptive mini-game stubs for new game types ──────────
+// These wrap the existing MINIGAME system with age-appropriate content
+
+function startPeekabooGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const child = STATE.selectedChild;
+  const name = child?.name || 'friend';
+  const phrases = ['Where am I? PEEKABOO! There I am!', 'Ready? 1... 2... 3... PEEKABOO!', 'Hiding! Hiding! PEEKABOO — found you!'];
+  let i = 0;
+  function step() {
+    if (i >= phrases.length) return;
+    speakText(phrases[i++]);
+    setTimeout(step, 3500);
+  }
+  speakText("Let's play Peekaboo, " + name + "!");
+  setTimeout(step, 1500);
+  showToast('Peekaboo game started!', '🙈', 'success');
+}
+
+function startSoundImitationGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const sounds = ['Moo! Can you say MOO?', 'Woof woof! Can you say WOOF?', 'Meow! Can you say MEOW?', 'Oink oink! Can you say OINK?'];
+  const sound = sounds[Math.floor(Math.random() * sounds.length)];
+  speakText(sound);
+  showToast('Copy that sound!', '🔊', 'success');
+}
+
+function startColorFlashGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const colors = ['red', 'blue', 'yellow', 'green', 'orange', 'purple'];
+  const colorNames = ['RED!', 'BLUE!', 'YELLOW!', 'GREEN!', 'ORANGE!', 'PURPLE!'];
+  let i = 0;
+  const modal = document.getElementById('miniGameModal');
+  const content = document.getElementById('miniGameContent');
+  const title   = document.getElementById('miniGameTitle');
+  if (!modal || !content) { startMiniGame('clap'); return; }
+  title.textContent = 'Color Flash!';
+  content.innerHTML = '<div id="colorFlashScreen" style="height:180px;border-radius:16px;background:red;display:flex;align-items:center;justify-content:center;font-size:3rem;font-weight:900;color:white;transition:background 0.3s" onclick="nextColorFlash()">RED!</div><p style="text-align:center;margin-top:12px;color:#ccc;font-size:13px">Tap to see next color!</p>';
+  modal.style.display = 'flex';
+  modal.classList.remove('hidden');
+  window._colorFlashList = colors;
+  window._colorFlashIdx  = 0;
+  speakText('Watch the colors! RED!');
+}
+
+window.nextColorFlash = function() {
+  const colors = ['red','blue','yellow','green','orange','purple'];
+  const names  = ['RED!','BLUE!','YELLOW!','GREEN!','ORANGE!','PURPLE!'];
+  window._colorFlashIdx = ((window._colorFlashIdx || 0) + 1) % colors.length;
+  const el = document.getElementById('colorFlashScreen');
+  if (el) { el.style.background = colors[window._colorFlashIdx]; el.textContent = names[window._colorFlashIdx]; }
+  speakText(names[window._colorFlashIdx]);
+};
+
+function startGentleBounceGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  speakText('Bounce bounce bounce! Can you bounce with me? Up! Down! Up! Down!');
+  showToast('Bouncy time!', '🎈', 'success');
+}
+
+function startCountingGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const child = STATE.selectedChild;
+  const name = child?.name || 'friend';
+  const max = 5;
+  speakText("Let's count together, " + name + "! Ready? ONE... TWO... THREE... FOUR... FIVE! Amazing!");
+  showToast('Counting game!', '🔢', 'success');
+}
+
+function startAnimalSoundsGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const animals = [
+    ['cow', 'MOO'],['dog', 'WOOF'],['cat', 'MEOW'],['pig', 'OINK'],
+    ['duck', 'QUACK'],['lion', 'ROAR'],['sheep', 'BAA'],['frog','RIBBIT']
+  ];
+  const [animal, sound] = animals[Math.floor(Math.random() * animals.length)];
+  speakText('What does a ' + animal + ' say? It says ' + sound + '! Can you say ' + sound + '?');
+  showToast('Animal sounds!', '🐾', 'success');
+}
+
+function startSimpleMatchingGame() {
+  startMiniGame('clap');
+}
+
+function startMathMiniGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const a = Math.floor(Math.random() * 5) + 1;
+  const b = Math.floor(Math.random() * 5) + 1;
+  speakText('Music Math! If I play ' + a + ' notes, then ' + b + ' more notes, how many notes is that? Count with me: ' + (a + b) + '! Great job!');
+  showToast('Music Math!', '🎼', 'success');
+}
+
+function startSpellingGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const words = ['BEAT', 'SONG', 'NOTE', 'DRUM', 'SING', 'PLAY', 'TUNE', 'MUSIC'];
+  const word = words[Math.floor(Math.random() * words.length)];
+  speakText("Let's spell " + word + "! Ready? " + word.split("").join("... ") + "! You spelled " + word + "!");
+  showToast('Spell it out!', '🔤', 'success');
+}
+
+function startMusicQuizGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const questions = [
+    ['How many notes are in a musical scale?', '7! Do Re Mi Fa Sol La Ti!'],
+    ['What instrument has black and white keys?', 'A piano!'],
+    ['How many strings does a guitar have?', 'Six strings!'],
+    ['What do you call the speed of music?', 'Tempo!'],
+    ['What is a group of musicians called?', 'A band or orchestra!'],
+  ];
+  const [q, a] = questions[Math.floor(Math.random() * questions.length)];
+  speakText("Music Quiz! Here's your question: " + q + " Do you know the answer? The answer is... " + a + " Amazing!");
+  showToast('Music Quiz!', '🎓', 'success');
+}
+
+function startStorySongGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const child = STATE.selectedChild;
+  const name = child?.name || 'the hero';
+  speakText('Once upon a time, ' + name + ' found a magical instrument. When they played it, the whole world started to dance! What instrument did ' + name + ' find? Tell me your story!');
+  showToast('Story Song!', '📖', 'success');
+}
+
+function startLyricFillGame() {
+  if (window._activeTTSAudio) { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; window._activeTTSAudio = null; }
+  const lyrics = [
+    ['Twinkle twinkle little...', 'STAR!'],
+    ['Old MacDonald had a...', 'FARM!'],
+    ['The wheels on the bus go round and...', 'ROUND!'],
+    ['Row row row your...', 'BOAT!'],
+    ['Head shoulders knees and...', 'TOES!'],
+  ];
+  const [line, answer] = lyrics[Math.floor(Math.random() * lyrics.length)];
+  speakText('Fill in the lyric! ' + line + ' What comes next? Say it! ' + answer + '! You got it!');
+  showToast('Fill the Lyric!', '✍️', 'success');
+}
+
+// ── Engagement loop timer (runs every 15s during session) ────
+let _engagementLoopTimer = null;
+function startEngagementLoop() {
+  clearInterval(_engagementLoopTimer);
+  _engagementLoopTimer = setInterval(function() {
+    ADAPTIVE.engagementLoopStep();
+  }, 15000);
+}
+function stopEngagementLoop() {
+  clearInterval(_engagementLoopTimer);
+  _engagementLoopTimer = null;
+  ADAPTIVE.saveEngagementState();
+}
+
+// ============================================================
 // VOICE PERSONALITY ENGINE — Frontend Controller
 // Phase 2 "Alive System" — 5-Stage Pipeline:
 //   Input → Emotion Detection → Memory → Groq Personality
@@ -6250,12 +7035,18 @@ async function tryRestoreSession() {
 const VOICE_PERSONALITY = {
   gender:      'female',
   style:       'default',
-  character:   'luna',   // luna | max | bubbles
+  character:   'luna',   // luna | max | bubbles | _custom_eleven | _custom_openai
   stability:   0.35,
   styleBoost:  0.75,
   similarity:  0.60,
   groqEnabled: true,
   _saved:      false,
+  // Full voice picker fields
+  preferredProvider:    'elevenlabs',
+  elevenlabsVoiceId:    'EXAVITQu4vr4xnSDxMaL',
+  elevenlabsVoiceName:  'Luna (Rachel)',
+  openaiVoice:          'nova',
+  openaiVoiceLabel:     'Nova (Warm female)',
   // Character → gender + style mapping
   CHARACTERS: {
     luna:    { gender: 'female', style: 'default',  emoji: '🌙', desc: 'Luna — Warm female host (Rachel voice)',     label: 'Luna' },
@@ -6304,6 +7095,12 @@ function emotionToVibe(emotion) {
 }
 
 // ── Character Voice Selector ──────────────────────────────────
+// Map character → ElevenLabs voice ID
+var CHAR_VOICE_IDS = {
+  luna:    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Luna (Rachel)',  provider: 'elevenlabs' },
+  max:     { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Max (Josh)',     provider: 'elevenlabs' },
+  bubbles: { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Bubbles (Matilda)', provider: 'elevenlabs' },
+};
 function setCharacterVoice(character) {
   const chars = VOICE_PERSONALITY.CHARACTERS;
   const char  = chars[character];
@@ -6311,14 +7108,29 @@ function setCharacterVoice(character) {
   VOICE_PERSONALITY.character = character;
   VOICE_PERSONALITY.gender    = char.gender;
   VOICE_PERSONALITY.style     = char.style;
+  // Set ElevenLabs voice ID for this character
+  var cvi = CHAR_VOICE_IDS[character];
+  if (cvi) {
+    VOICE_PERSONALITY.elevenlabsVoiceId   = cvi.id;
+    VOICE_PERSONALITY.elevenlabsVoiceName = cvi.name;
+    VOICE_PERSONALITY.preferredProvider   = cvi.provider;
+  }
   const active   = 'border-color:#ff6b9d;background:rgba(255,107,157,0.15)';
   const inactive = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
   ['luna','max','bubbles'].forEach(function(c) {
     const btn = document.getElementById('char' + c.charAt(0).toUpperCase() + c.slice(1));
     if (btn) btn.style.cssText = (c === character ? active : inactive);
   });
+  // Deselect ElevenLabs/OpenAI custom buttons
+  document.querySelectorAll('.eleven-voice-btn,.openai-voice-btn').forEach(function(btn) {
+    btn.style.cssText = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+  });
   const infoEl = document.getElementById('selectedCharInfo');
   if (infoEl) infoEl.textContent = char.emoji + ' ' + char.desc;
+  // Update active bar
+  if (typeof VOICE_PICKER !== 'undefined') {
+    VOICE_PICKER.updateActiveBar(char.emoji, char.label, char.desc, 'ElevenLabs');
+  }
   // Also sync style buttons
   setVoiceStyle(char.style);
   updateExpressivenessPreview();
@@ -6395,6 +7207,233 @@ function updateExpressivenessPreview() {
   el.style.background = color + '22';
 }
 
+// ══════════════════════════════════════════════════════════════
+// VOICE_PICKER — Full voice picker controller
+// Manages tab switching, ElevenLabs + OpenAI voice lists,
+// per-child voice persistence, and active voice display.
+// ══════════════════════════════════════════════════════════════
+var VOICE_PICKER = {
+  activeTab: 'chars',
+
+  // All known ElevenLabs voices (name, ID, gender, tag)
+  ELEVEN_VOICES: [
+    // Female
+    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Luna (Rachel)',  gender: 'female', tag: 'Warm Host',    emoji: '🌙' },
+    { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Bubbles (Matilda)', gender: 'female', tag: 'Playful',   emoji: '🫧' },
+    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel',        gender: 'female', tag: 'Warm',          emoji: '🌸' },
+    { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi',          gender: 'female', tag: 'Strong',        emoji: '💪' },
+    { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli',          gender: 'female', tag: 'Energetic',     emoji: '⚡' },
+    { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda',       gender: 'female', tag: 'Storyteller',   emoji: '📖' },
+    { id: 'pMsXgVXv3BLzUgSXRplE', name: 'Serena',        gender: 'female', tag: 'Calm',          emoji: '🕊️' },
+    { id: 'IKne3meq5aSn9XLyUdCD', name: 'Charlotte',     gender: 'female', tag: 'Narrator',      emoji: '🎬' },
+    { id: 'oWAxZDx7w5VEj9dCyTzz', name: 'Grace',         gender: 'female', tag: 'Gentle',        emoji: '🌿' },
+    { id: 'flq6f7yk4E4fJM5XTYuZ', name: 'Bella',         gender: 'female', tag: 'Soothing',      emoji: '🌙' },
+    // Male
+    { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Max (Josh)',    gender: 'male',   tag: 'Energetic Host', emoji: '⚡' },
+    { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold',        gender: 'male',   tag: 'Strong',        emoji: '🦁' },
+    { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam',          gender: 'male',   tag: 'Deep',          emoji: '🎤' },
+    { id: '2EiwWnXFnvU5JabPnv8n', name: 'Clyde',         gender: 'male',   tag: 'Western',       emoji: '🤠' },
+    { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam',           gender: 'male',   tag: 'Casual',        emoji: '😊' },
+    { id: 'GBv7mTt0atIp3Br8iCZE', name: 'Thomas',        gender: 'male',   tag: 'Calm',          emoji: '🌊' },
+    { id: 'N2lVS1w4EtoT3dr4eOWO', name: 'Callum',        gender: 'male',   tag: 'Authoritative', emoji: '🎙️' },
+    { id: 'ODq5zmih8GrVes37Dizd', name: 'Patrick',       gender: 'male',   tag: 'Narrative',     emoji: '📚' },
+    { id: 'ZQe5CZNOzWyzPSCn5a3c', name: 'Fin',           gender: 'male',   tag: 'Friendly',      emoji: '👋' },
+    { id: 'g5CIjZEefAph4nQFvHAz', name: 'Ethan',         gender: 'male',   tag: 'Whispery',      emoji: '🤫' },
+  ],
+
+  // OpenAI voices
+  OPENAI_VOICES: [
+    { id: 'nova',    name: 'Nova',    label: 'Nova (Warm female)',     emoji: '🌟', gender: 'female' },
+    { id: 'shimmer', name: 'Shimmer', label: 'Shimmer (Clear female)', emoji: '✨', gender: 'female' },
+    { id: 'alloy',   name: 'Alloy',   label: 'Alloy (Neutral)',        emoji: '🔩', gender: 'neutral' },
+    { id: 'echo',    name: 'Echo',    label: 'Echo (Calm male)',        emoji: '🔊', gender: 'male' },
+    { id: 'fable',   name: 'Fable',   label: 'Fable (Storyteller)',    emoji: '📖', gender: 'male' },
+    { id: 'onyx',    name: 'Onyx',    label: 'Onyx (Deep male)',        emoji: '🖤', gender: 'male' },
+  ],
+
+  // Switch tab
+  switchTab: function(tab) {
+    this.activeTab = tab;
+    var panels = ['chars', 'eleven', 'openai'];
+    panels.forEach(function(p) {
+      var panel = document.getElementById('vpPanel-' + p);
+      var tabBtn = document.getElementById('vpTab-' + p);
+      if (panel) {
+        if (p === tab) { panel.classList.remove('hidden'); }
+        else { panel.classList.add('hidden'); }
+      }
+      if (tabBtn) {
+        if (p === tab) {
+          tabBtn.style.background = '#ff6b9d';
+          tabBtn.style.color = '#fff';
+        } else {
+          tabBtn.style.background = 'transparent';
+          tabBtn.style.color = '#aaa';
+        }
+      }
+    });
+    // Lazy-render ElevenLabs / OpenAI on first open
+    if (tab === 'eleven') this.renderElevenLabs();
+    if (tab === 'openai') this.renderOpenAI();
+  },
+
+  // Build an ElevenLabs voice button
+  _elevenBtn: function(v) {
+    var isActive = (VOICE_PERSONALITY.elevenlabsVoiceId === v.id) ||
+                   (VOICE_PERSONALITY.character === 'luna'    && v.id === 'EXAVITQu4vr4xnSDxMaL') ||
+                   (VOICE_PERSONALITY.character === 'max'     && v.id === 'TxGEqnHWrfWFTfGW9XjX') ||
+                   (VOICE_PERSONALITY.character === 'bubbles' && v.id === 'jBpfuIE2acCO8z3wKNLl');
+    var active   = 'border-color:#ff6b9d;background:rgba(255,107,157,0.15)';
+    var inactive = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+    var btn = document.createElement('button');
+    btn.className = 'eleven-voice-btn flex items-center gap-2 p-2 rounded-xl border transition-all text-left w-full';
+    btn.style.cssText = isActive ? active : inactive;
+    btn.setAttribute('data-vid', v.id);
+    btn.innerHTML = '<span class="text-lg flex-shrink-0">' + v.emoji + '</span>' +
+      '<div class="min-w-0"><div class="text-xs font-bold truncate">' + v.name + '</div>' +
+      '<div class="text-xs truncate" style="color:#aaa">' + v.tag + '</div></div>';
+    var self = this;
+    btn.onclick = function() { self.selectElevenVoice(v); };
+    return btn;
+  },
+
+  renderElevenLabs: function() {
+    var femEl = document.getElementById('vpElevenFemale');
+    var malEl = document.getElementById('vpElevenMale');
+    if (!femEl || !malEl) return;
+    // Only rebuild if empty or voice changed
+    femEl.innerHTML = '';
+    malEl.innerHTML = '';
+    var self = this;
+    this.ELEVEN_VOICES.forEach(function(v) {
+      var btn = self._elevenBtn(v);
+      if (v.gender === 'female') femEl.appendChild(btn);
+      else malEl.appendChild(btn);
+    });
+  },
+
+  renderOpenAI: function() {
+    var el = document.getElementById('vpOpenAI');
+    if (!el) return;
+    el.innerHTML = '';
+    var self = this;
+    this.OPENAI_VOICES.forEach(function(v) {
+      var isActive = VOICE_PERSONALITY.openaiVoice === v.id;
+      var active   = 'border-color:#3b82f6;background:rgba(59,130,246,0.15)';
+      var inactive = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+      var btn = document.createElement('button');
+      btn.className = 'openai-voice-btn flex items-center gap-2 p-2 rounded-xl border transition-all text-left w-full';
+      btn.style.cssText = isActive ? active : inactive;
+      btn.setAttribute('data-vid', v.id);
+      btn.innerHTML = '<span class="text-lg flex-shrink-0">' + v.emoji + '</span>' +
+        '<div class="min-w-0"><div class="text-xs font-bold truncate">' + v.name + '</div>' +
+        '<div class="text-xs truncate" style="color:#aaa">' + v.label + '</div></div>';
+      btn.onclick = function() { self.selectOpenAIVoice(v); };
+      el.appendChild(btn);
+    });
+  },
+
+  selectElevenVoice: function(v) {
+    // Store the ElevenLabs voice ID
+    VOICE_PERSONALITY.elevenlabsVoiceId   = v.id;
+    VOICE_PERSONALITY.elevenlabsVoiceName = v.name;
+    VOICE_PERSONALITY.preferredProvider   = 'elevenlabs';
+    // Map gender
+    VOICE_PERSONALITY.gender = v.gender === 'male' ? 'male' : 'female';
+    // Clear character selection (it's a raw EL voice now)
+    VOICE_PERSONALITY.character = '_custom_eleven';
+    // Update character buttons to none
+    var inactive = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+    ['luna','max','bubbles'].forEach(function(c) {
+      var btn = document.getElementById('char' + c.charAt(0).toUpperCase() + c.slice(1));
+      if (btn) btn.style.cssText = inactive;
+    });
+    // Update EL button highlights
+    document.querySelectorAll('.eleven-voice-btn').forEach(function(btn) {
+      btn.style.cssText = btn.getAttribute('data-vid') === v.id
+        ? 'border-color:#ff6b9d;background:rgba(255,107,157,0.15)'
+        : 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+    });
+    // Update info
+    var infoEl = document.getElementById('selectedCharInfo');
+    if (infoEl) infoEl.textContent = v.emoji + ' ' + v.name + ' — ' + v.tag + ' (ElevenLabs)';
+    this.updateActiveBar(v.emoji, v.name, v.tag, 'ElevenLabs');
+  },
+
+  selectOpenAIVoice: function(v) {
+    VOICE_PERSONALITY.openaiVoice        = v.id;
+    VOICE_PERSONALITY.openaiVoiceLabel   = v.label;
+    VOICE_PERSONALITY.preferredProvider  = 'openai';
+    VOICE_PERSONALITY.gender = (v.gender === 'male') ? 'male' : 'female';
+    VOICE_PERSONALITY.character = '_custom_openai';
+    // Clear character buttons
+    var inactive = 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+    ['luna','max','bubbles'].forEach(function(c) {
+      var btn = document.getElementById('char' + c.charAt(0).toUpperCase() + c.slice(1));
+      if (btn) btn.style.cssText = inactive;
+    });
+    // Update OpenAI button highlights
+    document.querySelectorAll('.openai-voice-btn').forEach(function(btn) {
+      btn.style.cssText = btn.getAttribute('data-vid') === v.id
+        ? 'border-color:#3b82f6;background:rgba(59,130,246,0.15)'
+        : 'border-color:rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)';
+    });
+    var infoEl = document.getElementById('selectedCharInfo');
+    if (infoEl) infoEl.textContent = v.emoji + ' ' + v.name + ' — ' + v.label + ' (OpenAI)';
+    this.updateActiveBar(v.emoji, v.name, v.label, 'OpenAI');
+  },
+
+  updateActiveBar: function(emoji, name, desc, provider) {
+    var emoEl  = document.getElementById('activeVoiceEmoji');
+    var namEl  = document.getElementById('activeVoiceName');
+    var desEl  = document.getElementById('activeVoiceDesc');
+    var prvEl  = document.getElementById('activeVoiceProvider');
+    if (emoEl) emoEl.textContent = emoji;
+    if (namEl) namEl.textContent = name;
+    if (desEl) desEl.textContent = desc;
+    if (prvEl) {
+      prvEl.textContent = provider;
+      var isOpenAI = provider === 'OpenAI';
+      prvEl.style.background = isOpenAI ? 'rgba(59,130,246,0.2)' : 'rgba(168,85,247,0.2)';
+      prvEl.style.color      = isOpenAI ? '#60a5fa' : '#c084fc';
+    }
+  },
+
+  // Update active bar from current VOICE_PERSONALITY state
+  syncActiveBar: function() {
+    var char = VOICE_PERSONALITY.CHARACTERS[VOICE_PERSONALITY.character];
+    if (char) {
+      this.updateActiveBar(char.emoji, char.label, char.desc, 'ElevenLabs');
+    } else if (VOICE_PERSONALITY.preferredProvider === 'openai') {
+      var ov = this.OPENAI_VOICES.find(function(v) { return v.id === VOICE_PERSONALITY.openaiVoice; });
+      if (ov) this.updateActiveBar(ov.emoji, ov.name, ov.label, 'OpenAI');
+    } else if (VOICE_PERSONALITY.elevenlabsVoiceName) {
+      var ev = this.ELEVEN_VOICES.find(function(v) { return v.id === VOICE_PERSONALITY.elevenlabsVoiceId; });
+      if (ev) this.updateActiveBar(ev.emoji, ev.name, ev.tag, 'ElevenLabs');
+    }
+  },
+
+  // Show/hide per-child voice badge
+  showChildBadge: function(childName) {
+    var badge = document.getElementById('childVoiceBadge');
+    var text  = document.getElementById('childVoiceBadgeText');
+    if (!badge) return;
+    if (childName) {
+      if (text) text.textContent = 'Voice saved for ' + childName;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  },
+
+  // Init voice picker: render lists, sync active bar
+  init: function() {
+    this.renderElevenLabs();
+    this.renderOpenAI();
+    this.syncActiveBar();
+  },
+};
+
 async function testVoice() {
   const input  = document.getElementById('voiceTestInput');
   const status = document.getElementById('voiceTestStatus');
@@ -6428,25 +7467,50 @@ async function saveVoiceSettings() {
   VOICE_PERSONALITY.styleBoost = parseFloat(stylEl ? stylEl.value : '0.75');
   VOICE_PERSONALITY.similarity = parseFloat(simEl  ? simEl.value  : '0.60');
   VOICE_PERSONALITY.groqEnabled = togEl ? togEl.checked : true;
+
+  // Determine active voice IDs
+  var cvi = CHAR_VOICE_IDS[VOICE_PERSONALITY.character];
+  var elId   = cvi ? cvi.id   : (VOICE_PERSONALITY.elevenlabsVoiceId   || 'EXAVITQu4vr4xnSDxMaL');
+  var elName = cvi ? cvi.name : (VOICE_PERSONALITY.elevenlabsVoiceName || 'Luna');
+  var provider = VOICE_PERSONALITY.preferredProvider || (cvi ? 'elevenlabs' : 'openai');
+
+  // Current child ID (for per-child persistence)
+  var childId = STATE.selectedChild ? (STATE.selectedChild.id || -1) : -1;
+
+  var prefsPayload = {
+    userId:               AUTH.user?.id ? String(AUTH.user.id) : 'demo',
+    childId:              childId,
+    voiceGender:          VOICE_PERSONALITY.gender,
+    voiceCharacter:       VOICE_PERSONALITY.character,
+    voiceStyle:           VOICE_PERSONALITY.style,
+    stability:            VOICE_PERSONALITY.stability,
+    styleBoost:           VOICE_PERSONALITY.styleBoost,
+    similarity:           VOICE_PERSONALITY.similarity,
+    groqPersonality:      VOICE_PERSONALITY.groqEnabled,
+    preferredProvider:    provider,
+    elevenlabsVoice:      elId,
+    elevenlabsVoiceName:  elName,
+    openaiVoice:          VOICE_PERSONALITY.openaiVoice || 'nova',
+    openaiVoiceLabel:     VOICE_PERSONALITY.openaiVoiceLabel || 'Nova (Warm female)',
+  };
+
   try {
-    const r = await api('PUT', '/tts/prefs', {
-      userId:          AUTH.user?.id ? String(AUTH.user.id) : 'demo',
-      voiceGender:     VOICE_PERSONALITY.gender,
-      voiceCharacter:  VOICE_PERSONALITY.character,
-      voiceStyle:      VOICE_PERSONALITY.style,
-      stability:       VOICE_PERSONALITY.stability,
-      styleBoost:      VOICE_PERSONALITY.styleBoost,
-      similarity:      VOICE_PERSONALITY.similarity,
-      groqPersonality: VOICE_PERSONALITY.groqEnabled,
-    });
-    const char = VOICE_PERSONALITY.CHARACTERS[VOICE_PERSONALITY.character];
-    const charName = char ? char.label : VOICE_PERSONALITY.gender;
+    const r = await api('PUT', '/tts/prefs', prefsPayload);
+    var char = VOICE_PERSONALITY.CHARACTERS[VOICE_PERSONALITY.character];
+    var charName = char ? char.label : (VOICE_PERSONALITY.elevenlabsVoiceName || VOICE_PERSONALITY.openaiVoice || 'selected voice');
+    var childName = STATE.selectedChild ? STATE.selectedChild.name : null;
     if (r.success !== false) {
-      showToast('Voice saved! ' + charName + ' is your host', '🎤', 'success');
+      var msg = childName
+        ? 'Voice saved for ' + childName + ': ' + charName
+        : charName + ' is your host';
+      showToast(msg, '🎤', 'success');
       VOICE_PERSONALITY._saved = true;
+      if (childName && typeof VOICE_PICKER !== 'undefined') {
+        VOICE_PICKER.showChildBadge(childName);
+      }
       const statusEl = document.getElementById('voiceEngineStatus');
       if (statusEl) {
-        statusEl.textContent = (VOICE_PERSONALITY.groqEnabled ? '🧠 Groq + ' : '') + 'ElevenLabs Active';
+        statusEl.textContent = (VOICE_PERSONALITY.groqEnabled ? '🧠 Groq + ' : '') + provider.charAt(0).toUpperCase() + provider.slice(1) + ' Active';
         statusEl.style.color = '#4ade80';
         statusEl.style.background = 'rgba(0,200,100,0.15)';
       }
@@ -6456,49 +7520,92 @@ async function saveVoiceSettings() {
   } catch(e) {
     showToast('Saved locally', '💾', 'info');
   }
+
+  // LocalStorage fallback (survives page refresh even if API down)
   localStorage.setItem('mb_voice_personality', JSON.stringify({
-    gender:      VOICE_PERSONALITY.gender,
-    character:   VOICE_PERSONALITY.character,
-    style:       VOICE_PERSONALITY.style,
-    stability:   VOICE_PERSONALITY.stability,
-    styleBoost:  VOICE_PERSONALITY.styleBoost,
-    similarity:  VOICE_PERSONALITY.similarity,
-    groqEnabled: VOICE_PERSONALITY.groqEnabled,
+    gender:              VOICE_PERSONALITY.gender,
+    character:           VOICE_PERSONALITY.character,
+    style:               VOICE_PERSONALITY.style,
+    stability:           VOICE_PERSONALITY.stability,
+    styleBoost:          VOICE_PERSONALITY.styleBoost,
+    similarity:          VOICE_PERSONALITY.similarity,
+    groqEnabled:         VOICE_PERSONALITY.groqEnabled,
+    elevenlabsVoiceId:   VOICE_PERSONALITY.elevenlabsVoiceId   || elId,
+    elevenlabsVoiceName: VOICE_PERSONALITY.elevenlabsVoiceName || elName,
+    openaiVoice:         VOICE_PERSONALITY.openaiVoice         || 'nova',
+    openaiVoiceLabel:    VOICE_PERSONALITY.openaiVoiceLabel     || 'Nova (Warm female)',
+    preferredProvider:   provider,
   }));
+
+  // Intent Layer SET_VOICE_PREFS
+  ADAPTIVE.intent('SET_VOICE_PREFS', {
+    preferredProvider:    provider,
+    elevenlabsVoiceId:    elId,
+    elevenlabsVoiceName:  elName,
+    openaiVoice:          VOICE_PERSONALITY.openaiVoice || 'nova',
+    defaultEmotion:       'friendly',
+  }).catch(() => {});
+
+  // Sync active bar display
+  if (typeof VOICE_PICKER !== 'undefined') VOICE_PICKER.syncActiveBar();
 }
 
-async function loadVoiceSettings() {
+// ── Load voice settings — per-child if child selected, else user-level ──
+async function loadVoiceSettings(childId) {
   try {
     const uid = AUTH.user?.id ? String(AUTH.user.id) : 'demo';
-    const r = await api('GET', '/tts/prefs?userId=' + encodeURIComponent(uid));
+    var qp = '/tts/prefs?userId=' + encodeURIComponent(uid);
+    if (childId && childId > 0) qp += '&childId=' + childId;
+    const r = await api('GET', qp);
     if (r.success !== false && r.data) {
       const d = r.data;
-      if (d.voiceGender)           VOICE_PERSONALITY.gender      = d.voiceGender;
-      if (d.voiceCharacter)        VOICE_PERSONALITY.character   = d.voiceCharacter;
-      if (d.voiceStyle)            VOICE_PERSONALITY.style       = d.voiceStyle;
-      if (d.stability  != null)    VOICE_PERSONALITY.stability   = d.stability;
-      if (d.styleBoost != null)    VOICE_PERSONALITY.styleBoost  = d.styleBoost;
-      if (d.similarity != null)    VOICE_PERSONALITY.similarity  = d.similarity;
-      if (d.groqPersonality != null) VOICE_PERSONALITY.groqEnabled = d.groqPersonality;
+      if (d.voiceGender)           VOICE_PERSONALITY.gender             = d.voiceGender;
+      if (d.voiceCharacter)        VOICE_PERSONALITY.character          = d.voiceCharacter;
+      if (d.voiceStyle)            VOICE_PERSONALITY.style              = d.voiceStyle;
+      if (d.stability  != null)    VOICE_PERSONALITY.stability          = d.stability;
+      if (d.styleBoost != null)    VOICE_PERSONALITY.styleBoost         = d.styleBoost;
+      if (d.similarity != null)    VOICE_PERSONALITY.similarity         = d.similarity;
+      if (d.groqPersonality != null) VOICE_PERSONALITY.groqEnabled      = d.groqPersonality;
+      if (d.elevenlabsVoice)       VOICE_PERSONALITY.elevenlabsVoiceId  = d.elevenlabsVoice;
+      if (d.elevenlabsVoiceName)   VOICE_PERSONALITY.elevenlabsVoiceName = d.elevenlabsVoiceName;
+      if (d.openaiVoice)           VOICE_PERSONALITY.openaiVoice        = d.openaiVoice;
+      if (d.openaiVoiceLabel)      VOICE_PERSONALITY.openaiVoiceLabel   = d.openaiVoiceLabel;
+      if (d.preferredProvider)     VOICE_PERSONALITY.preferredProvider  = d.preferredProvider;
     }
   } catch(e) {
     try {
       const saved = JSON.parse(localStorage.getItem('mb_voice_personality') || '{}');
-      if (saved.gender)             VOICE_PERSONALITY.gender      = saved.gender;
-      if (saved.character)          VOICE_PERSONALITY.character   = saved.character;
-      if (saved.style)              VOICE_PERSONALITY.style       = saved.style;
-      if (saved.stability  != null) VOICE_PERSONALITY.stability   = saved.stability;
-      if (saved.styleBoost != null) VOICE_PERSONALITY.styleBoost  = saved.styleBoost;
-      if (saved.similarity != null) VOICE_PERSONALITY.similarity  = saved.similarity;
-      if (saved.groqEnabled != null) VOICE_PERSONALITY.groqEnabled = saved.groqEnabled;
+      if (saved.gender)             VOICE_PERSONALITY.gender             = saved.gender;
+      if (saved.character)          VOICE_PERSONALITY.character          = saved.character;
+      if (saved.style)              VOICE_PERSONALITY.style              = saved.style;
+      if (saved.stability  != null) VOICE_PERSONALITY.stability          = saved.stability;
+      if (saved.styleBoost != null) VOICE_PERSONALITY.styleBoost         = saved.styleBoost;
+      if (saved.similarity != null) VOICE_PERSONALITY.similarity         = saved.similarity;
+      if (saved.groqEnabled != null) VOICE_PERSONALITY.groqEnabled       = saved.groqEnabled;
+      if (saved.elevenlabsVoiceId)  VOICE_PERSONALITY.elevenlabsVoiceId  = saved.elevenlabsVoiceId;
+      if (saved.elevenlabsVoiceName) VOICE_PERSONALITY.elevenlabsVoiceName = saved.elevenlabsVoiceName;
+      if (saved.openaiVoice)        VOICE_PERSONALITY.openaiVoice        = saved.openaiVoice;
+      if (saved.openaiVoiceLabel)   VOICE_PERSONALITY.openaiVoiceLabel   = saved.openaiVoiceLabel;
+      if (saved.preferredProvider)  VOICE_PERSONALITY.preferredProvider  = saved.preferredProvider;
     } catch(e2) {}
   }
-  // Restore character button highlight
-  if (VOICE_PERSONALITY.character) {
+  // Restore button highlights
+  var char = VOICE_PERSONALITY.CHARACTERS[VOICE_PERSONALITY.character];
+  if (char) {
     setCharacterVoice(VOICE_PERSONALITY.character);
   } else {
     setVoiceGender(VOICE_PERSONALITY.gender);
     setVoiceStyle(VOICE_PERSONALITY.style);
+    // Highlight custom ElevenLabs/OpenAI button if applicable
+    if (typeof VOICE_PICKER !== 'undefined') {
+      if (VOICE_PERSONALITY.preferredProvider === 'openai') {
+        var ov = VOICE_PICKER.OPENAI_VOICES.find(function(v) { return v.id === VOICE_PERSONALITY.openaiVoice; });
+        if (ov) VOICE_PICKER.selectOpenAIVoice(ov);
+      } else if (VOICE_PERSONALITY.elevenlabsVoiceId) {
+        var ev = VOICE_PICKER.ELEVEN_VOICES.find(function(v) { return v.id === VOICE_PERSONALITY.elevenlabsVoiceId; });
+        if (ev) VOICE_PICKER.selectElevenVoice(ev);
+      }
+    }
   }
   const stab = document.getElementById('elStability');
   const styl = document.getElementById('elStyleBoost');
@@ -6516,6 +7623,11 @@ async function loadVoiceSettings() {
   if (statusEl) {
     statusEl.textContent = (VOICE_PERSONALITY.groqEnabled ? '🧠 Groq + ' : '') + 'ElevenLabs';
     statusEl.style.color = '#4ade80';
+  }
+  if (typeof VOICE_PICKER !== 'undefined') {
+    VOICE_PICKER.syncActiveBar();
+    VOICE_PICKER.renderElevenLabs();
+    VOICE_PICKER.renderOpenAI();
   }
 }
 
@@ -6749,8 +7861,9 @@ async function init() {
   BILLING.updateTTSProviderUI();
   GATE.refresh();
 
-  // Load voice personality settings (gender, style, sliders)
+  // Load voice personality settings (user-level) + init VOICE_PICKER
   await loadVoiceSettings();
+  if (typeof VOICE_PICKER !== 'undefined') VOICE_PICKER.init();
 
   // Load profiles on start
   const r = await api('GET', '/profiles');

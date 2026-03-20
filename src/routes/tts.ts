@@ -217,51 +217,61 @@ app.post('/cache/evict', async (c) => {
 
 // ════════════════════════════════════════════════════════════
 // GET /api/tts/prefs
-// Load voice preferences for a user
-// Query params: userId (optional)
+// Load voice preferences for a user (optionally per child)
+// Query params: userId, childId (optional — loads child-specific prefs
+//               if set, falls back to user-level if not found)
 // ════════════════════════════════════════════════════════════
 app.get('/prefs', async (c) => {
   const db = c.env.DB
   if (!db) return c.json({ error: 'Database not available' }, 503)
 
-  const userId = c.req.query('userId') ?? 'demo'
-  const prefs  = await getVoicePreferences(db, userId)
+  const userId  = c.req.query('userId')  ?? 'demo'
+  const childId = c.req.query('childId') ? parseInt(c.req.query('childId')!) : undefined
+  const prefs   = await getVoicePreferences(db, userId, childId)
 
   // Normalize to what the frontend VOICE_PERSONALITY module expects
   if (prefs) {
     return c.json({
-      success: true, userId,
+      success: true, userId, childId: childId ?? -1,
+      isChildSpecific: prefs.isChildSpecific ?? false,
       data: {
-        voiceGender:     prefs.voiceGender     ?? 'female',
-        voiceCharacter:  prefs.voiceCharacter  ?? 'luna',
-        voiceStyle:      prefs.voiceStyle      ?? 'default',
-        stability:       prefs.stability       ?? 0.35,
-        styleBoost:      prefs.styleBoost      ?? 0.75,
-        similarity:      prefs.similarity      ?? 0.60,
-        groqPersonality: prefs.groqPersonality ?? true,
-        singingMode:     prefs.singingMode     ?? false,
-        speed:           prefs.speed           ?? 0.95,
-        preferredProvider: prefs.preferredProvider,
+        voiceGender:          prefs.voiceGender          ?? 'female',
+        voiceCharacter:       prefs.voiceCharacter       ?? 'luna',
+        voiceStyle:           prefs.voiceStyle           ?? 'default',
+        stability:            prefs.stability            ?? 0.35,
+        styleBoost:           prefs.styleBoost           ?? 0.75,
+        similarity:           prefs.similarity           ?? 0.60,
+        groqPersonality:      prefs.groqPersonality      ?? true,
+        singingMode:          prefs.singingMode          ?? false,
+        speed:                prefs.speed                ?? 0.95,
+        preferredProvider:    prefs.preferredProvider,
+        elevenlabsVoice:      prefs.elevenlabsVoice,
+        elevenlabsVoiceName:  prefs.elevenlabsVoiceName  ?? 'Luna',
+        openaiVoice:          prefs.openaiVoice,
+        openaiVoiceLabel:     prefs.openaiVoiceLabel     ?? 'Nova (Warm female)',
       },
       prefs,
     })
   }
-  return c.json({ success: true, userId, data: null, prefs: null })
+  return c.json({ success: true, userId, childId: childId ?? -1, data: null, prefs: null })
 })
 
 // ════════════════════════════════════════════════════════════
 // PUT /api/tts/prefs
-// Save voice preferences for a user
+// Save voice preferences for a user (or a specific child)
 //
 // Body: {
-//   userId?:           string
-//   preferredProvider?: 'openai' | 'elevenlabs' | 'polly'
-//   openaiVoice?:      string   (shimmer | nova | alloy | echo | fable | onyx)
-//   elevenlabsVoice?:  string   (rachel | bella | elli | charlie | josh, or raw ID)
-//   pollyVoice?:       string   (joanna | salli | kendra | ivy | amy | brian)
-//   speed?:            number   (0.5–2.0)
-//   defaultEmotion?:   string
-//   singingMode?:      boolean
+//   userId?:              string
+//   childId?:             number   (pass > 0 to save per-child prefs)
+//   preferredProvider?:  'openai' | 'elevenlabs' | 'polly'
+//   openaiVoice?:         string   (shimmer | nova | alloy | echo | fable | onyx)
+//   openaiVoiceLabel?:    string   (human-readable label)
+//   elevenlabsVoice?:     string   (voice ID, e.g. EXAVITQu4vr4xnSDxMaL)
+//   elevenlabsVoiceName?: string   (human-readable, e.g. Luna)
+//   pollyVoice?:          string   (joanna | salli | kendra | ivy | amy | brian)
+//   speed?:               number   (0.5–2.0)
+//   defaultEmotion?:      string
+//   singingMode?:         boolean
 // }
 // ════════════════════════════════════════════════════════════
 app.put('/prefs', async (c) => {
@@ -273,18 +283,21 @@ app.put('/prefs', async (c) => {
     return c.json({ success: false, error: 'Invalid JSON body' }, 400)
   }
 
-  const userId = body.userId ?? 'demo'
+  const userId  = body.userId  ?? 'demo'
+  const childId = body.childId ? Number(body.childId) : -1
   const {
-    preferredProvider, openaiVoice, elevenlabsVoice, pollyVoice,
-    speed, defaultEmotion, singingMode,
+    preferredProvider, openaiVoice, openaiVoiceLabel,
+    elevenlabsVoice, elevenlabsVoiceName,
+    pollyVoice, speed, defaultEmotion, singingMode,
     // Phase 2: full VOICE_PERSONALITY fields from frontend
     voiceGender, voiceStyle, stability, styleBoost, similarity,
     groqPersonality, voiceCharacter,
   } = body
 
   await saveVoicePreferences(db, userId, {
-    preferredProvider, openaiVoice, elevenlabsVoice, pollyVoice,
-    speed, defaultEmotion, singingMode,
+    preferredProvider, openaiVoice, openaiVoiceLabel,
+    elevenlabsVoice, elevenlabsVoiceName,
+    pollyVoice, speed, defaultEmotion, singingMode,
     voiceGender,
     voiceCharacter,
     voiceStyle,
@@ -292,9 +305,10 @@ app.put('/prefs', async (c) => {
     styleBoost:      styleBoost  != null ? parseFloat(styleBoost)  : undefined,
     similarity:      similarity  != null ? parseFloat(similarity)  : undefined,
     groqPersonality: groqPersonality != null ? Boolean(groqPersonality) : undefined,
+    childId,
   })
 
-  return c.json({ success: true, userId, message: 'Voice preferences saved' })
+  return c.json({ success: true, userId, childId, message: 'Voice preferences saved' })
 })
 
 // ════════════════════════════════════════════════════════════

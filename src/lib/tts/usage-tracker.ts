@@ -211,14 +211,17 @@ export async function getQuotaStatus(
   };
 }
 
-// ── Get voice preferences for a user ─────────────────────────
+// ── Get voice preferences (per-child with user-level fallback) ─
 export async function getVoicePreferences(
   db: D1Database,
-  userId: string
+  userId: string,
+  childId?: number   // omit or pass -1 for user-level prefs
 ): Promise<{
   preferredProvider: string;
   openaiVoice: string;
   elevenlabsVoice: string;
+  elevenlabsVoiceName: string;
+  openaiVoiceLabel: string;
   pollyVoice: string;
   speed: number;
   defaultEmotion: string;
@@ -231,40 +234,61 @@ export async function getVoicePreferences(
   styleBoost: number;
   similarity: number;
   groqPersonality: boolean;
+  // Meta
+  childId: number;
+  isChildSpecific: boolean;
 } | null> {
+  const cid = (childId != null && childId > 0) ? childId : -1;
   try {
-    const row = await db.prepare(
-      `SELECT * FROM tts_voice_preferences WHERE user_id = ?`
-    ).bind(userId).first() as any;
+    // 1. Try child-specific prefs first
+    let row: any = null;
+    if (cid > 0) {
+      row = await db.prepare(
+        `SELECT * FROM tts_voice_preferences WHERE user_id = ? AND child_id = ?`
+      ).bind(userId, cid).first() as any;
+    }
+    // 2. Fall back to user-level (child_id = -1 or old PRIMARY KEY row)
+    if (!row) {
+      row = await db.prepare(
+        `SELECT * FROM tts_voice_preferences WHERE user_id = ? ORDER BY child_id DESC LIMIT 1`
+      ).bind(userId).first() as any;
+    }
     if (!row) return null;
     return {
-      preferredProvider: row.preferred_provider,
-      openaiVoice:       row.openai_voice,
-      elevenlabsVoice:   row.elevenlabs_voice,
-      pollyVoice:        row.polly_voice,
-      speed:             row.speed,
-      defaultEmotion:    row.default_emotion,
-      singingMode:       row.singing_mode === 1,
-      voiceGender:       (row.voice_gender === 'male' ? 'male' : 'female') as 'female' | 'male',
+      preferredProvider:  row.preferred_provider,
+      openaiVoice:        row.openai_voice,
+      elevenlabsVoice:    row.elevenlabs_voice,
+      elevenlabsVoiceName: row.elevenlabs_voice_name ?? 'Luna',
+      openaiVoiceLabel:   row.openai_voice_label    ?? 'Nova (Warm female)',
+      pollyVoice:         row.polly_voice,
+      speed:              row.speed,
+      defaultEmotion:     row.default_emotion,
+      singingMode:        row.singing_mode === 1,
+      voiceGender:        (row.voice_gender === 'male' ? 'male' : 'female') as 'female' | 'male',
       // Phase 2
-      voiceCharacter:    row.voice_character ?? 'luna',
-      voiceStyle:        row.voice_style     ?? 'default',
-      stability:         row.stability       ?? 0.35,
-      styleBoost:        row.style_boost     ?? 0.75,
-      similarity:        row.similarity      ?? 0.60,
-      groqPersonality:   row.groq_personality !== 0,
+      voiceCharacter:     row.voice_character ?? 'luna',
+      voiceStyle:         row.voice_style     ?? 'default',
+      stability:          row.stability       ?? 0.35,
+      styleBoost:         row.style_boost     ?? 0.75,
+      similarity:         row.similarity      ?? 0.60,
+      groqPersonality:    row.groq_personality !== 0,
+      // Meta
+      childId:            row.child_id ?? -1,
+      isChildSpecific:    (row.child_id ?? -1) > 0,
     };
   } catch { return null; }
 }
 
-// ── Save voice preferences ────────────────────────────────────
+// ── Save voice preferences (per-child or user-level) ──────────
 export async function saveVoicePreferences(
   db: D1Database,
   userId: string,
   prefs: {
     preferredProvider?: string;
     openaiVoice?: string;
+    openaiVoiceLabel?: string;
     elevenlabsVoice?: string;
+    elevenlabsVoiceName?: string;
     pollyVoice?: string;
     speed?: number;
     defaultEmotion?: string;
@@ -277,37 +301,47 @@ export async function saveVoicePreferences(
     styleBoost?: number;
     similarity?: number;
     groqPersonality?: boolean;
+    // Per-child: pass childId > 0 to scope to that child, -1 for user-level
+    childId?: number;
   }
 ): Promise<void> {
+  const cid = (prefs.childId != null && prefs.childId > 0) ? prefs.childId : -1;
   try {
+    // Use INSERT OR REPLACE via the unique index (user_id, child_id)
     await db.prepare(
       `INSERT INTO tts_voice_preferences
-         (user_id, preferred_provider, openai_voice, elevenlabs_voice, polly_voice,
+         (user_id, child_id, preferred_provider, openai_voice, openai_voice_label,
+          elevenlabs_voice, elevenlabs_voice_name, polly_voice,
           speed, default_emotion, singing_mode, voice_gender,
           voice_character, voice_style, stability, style_boost, similarity, groq_personality,
           updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(user_id) DO UPDATE SET
-         preferred_provider = COALESCE(excluded.preferred_provider, preferred_provider),
-         openai_voice       = COALESCE(excluded.openai_voice, openai_voice),
-         elevenlabs_voice   = COALESCE(excluded.elevenlabs_voice, elevenlabs_voice),
-         polly_voice        = COALESCE(excluded.polly_voice, polly_voice),
-         speed              = COALESCE(excluded.speed, speed),
-         default_emotion    = COALESCE(excluded.default_emotion, default_emotion),
-         singing_mode       = COALESCE(excluded.singing_mode, singing_mode),
-         voice_gender       = COALESCE(excluded.voice_gender, voice_gender),
-         voice_character    = COALESCE(excluded.voice_character, voice_character),
-         voice_style        = COALESCE(excluded.voice_style, voice_style),
-         stability          = COALESCE(excluded.stability, stability),
-         style_boost        = COALESCE(excluded.style_boost, style_boost),
-         similarity         = COALESCE(excluded.similarity, similarity),
-         groq_personality   = COALESCE(excluded.groq_personality, groq_personality),
-         updated_at         = CURRENT_TIMESTAMP`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(user_id, child_id) DO UPDATE SET
+         preferred_provider    = COALESCE(excluded.preferred_provider, preferred_provider),
+         openai_voice          = COALESCE(excluded.openai_voice, openai_voice),
+         openai_voice_label    = COALESCE(excluded.openai_voice_label, openai_voice_label),
+         elevenlabs_voice      = COALESCE(excluded.elevenlabs_voice, elevenlabs_voice),
+         elevenlabs_voice_name = COALESCE(excluded.elevenlabs_voice_name, elevenlabs_voice_name),
+         polly_voice           = COALESCE(excluded.polly_voice, polly_voice),
+         speed                 = COALESCE(excluded.speed, speed),
+         default_emotion       = COALESCE(excluded.default_emotion, default_emotion),
+         singing_mode          = COALESCE(excluded.singing_mode, singing_mode),
+         voice_gender          = COALESCE(excluded.voice_gender, voice_gender),
+         voice_character       = COALESCE(excluded.voice_character, voice_character),
+         voice_style           = COALESCE(excluded.voice_style, voice_style),
+         stability             = COALESCE(excluded.stability, stability),
+         style_boost           = COALESCE(excluded.style_boost, style_boost),
+         similarity            = COALESCE(excluded.similarity, similarity),
+         groq_personality      = COALESCE(excluded.groq_personality, groq_personality),
+         updated_at            = CURRENT_TIMESTAMP`
     ).bind(
       userId,
+      cid,
       prefs.preferredProvider ?? null,
       prefs.openaiVoice ?? null,
+      prefs.openaiVoiceLabel ?? null,
       prefs.elevenlabsVoice ?? null,
+      prefs.elevenlabsVoiceName ?? null,
       prefs.pollyVoice ?? null,
       prefs.speed ?? null,
       prefs.defaultEmotion ?? null,

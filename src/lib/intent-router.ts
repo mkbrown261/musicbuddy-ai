@@ -57,7 +57,22 @@ export type IntentType =
   | 'GET_ENGAGEMENT_SUMMARY'
   // Session
   | 'START_SESSION'
-  | 'END_SESSION';
+  | 'END_SESSION'
+  // Adaptive Child Engine
+  | 'GET_AGE_PROFILE'
+  | 'GENERATE_ADAPTIVE_BEHAVIOR'
+  | 'GET_AGE_GAMES'
+  | 'APPLY_PERSONALITY'
+  | 'UPDATE_EMOTION_STATE'
+  | 'CHECK_USAGE_LIMIT'
+  | 'TRACK_USAGE'
+  | 'GET_USAGE_SUMMARY'
+  // Engagement & Personality persistence
+  | 'SAVE_ENGAGEMENT_STATE'
+  | 'LOAD_ENGAGEMENT_STATE'
+  | 'SAVE_PERSONALITY_PREF'
+  | 'LOAD_PERSONALITY_PREF'
+  | 'GET_FULL_SESSION_STATE';
 
 export interface IntentPayload<T = Record<string, unknown>> {
   intent: IntentType;
