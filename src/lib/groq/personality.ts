@@ -22,7 +22,7 @@ import type { TTSEmotion, TTSStyle } from '../tts/types';
 // ── Groq constants ────────────────────────────────────────────
 const GROQ_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL     = 'llama-3.1-8b-instant';
-const GROQ_TIMEOUT   = 4000;   // 4s — must not slow down TTS
+const GROQ_TIMEOUT   = 5000;   // 5s — allow enough time for full JSON response
 
 // ── Voice gender → ElevenLabs voice IDs ──────────────────────
 // These are REAL ElevenLabs voice IDs verified to exist.
@@ -140,7 +140,28 @@ function parsePersonalityResponse(raw: string): {
 } | null {
   try {
     const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const obj = JSON.parse(clean);
+
+    // First: try full JSON parse
+    let obj: any = null;
+    try {
+      obj = JSON.parse(clean);
+    } catch {
+      // If full parse fails (e.g. max_tokens truncation), try to salvage the
+      // "text" field by extracting the value from an incomplete JSON string.
+      // Pattern: "text": "...some text that may be cut off
+      const textMatch = clean.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      if (textMatch) {
+        // We recovered the text — use defaults for everything else
+        return {
+          text: textMatch[1].slice(0, 400),
+          voiceStyle: 'default',
+          ttsSettings: {
+            stability: 0.3, similarity_boost: 0.6, style: 0.9, use_speaker_boost: true,
+          },
+        };
+      }
+      return null;
+    }
 
     const validStyles: VoiceStyle[] = ['default', 'playful', 'soothing', 'energetic'];
     const voiceStyle: VoiceStyle = validStyles.includes(obj.voice_style)
@@ -282,7 +303,7 @@ export async function applyPersonality(
             { role: 'system', content: PERSONALITY_SYSTEM_PROMPT },
             { role: 'user',   content: `Emotion: ${emotion}\nStyle: ${style}\nText: ${text}` },
           ],
-          max_tokens:  200,
+          max_tokens:  400,      // 200 was too low — JSON often got truncated mid-string
           temperature: 0.8,
           top_p:       0.9,
           stream:      false,

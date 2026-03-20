@@ -5815,7 +5815,68 @@ async function speakText(text, emotionHint) {
   window.speechSynthesis.cancel();
 
   return new Promise((resolve) => {
-    const utter = new SpeechSynthesisUtterance(expressiveText);
+    // ── Pre-process text for browser SpeechSynthesis ────────────────
+    // Chrome/Edge/Safari's SpeechSynthesisUtterance has a known bug where
+    // it stops speaking at apostrophes in contractions (e.g. "it's" → "it").
+    // Fix: expand all contractions to their full forms before passing to
+    // the utterance. Also normalise smart apostrophes and em/en dashes.
+    function expandContractionsForSpeech(t) {
+      // Normalise curly/smart apostrophes to straight apostrophe first
+      t = t.replace(/[\u2018\u2019\u02BC]/g, "'");
+      // Replace em/en dash with comma pause (more natural speech)
+      t = t.replace(/\u2014|\u2013/g, ', ');
+      // Expand contractions (case-preserving: capitalise if match starts uppercase)
+      const cx = (pat, exp) => {
+        t = t.replace(pat, (m) =>
+          m[0] === m[0].toUpperCase() && m[0] !== m[0].toLowerCase()
+            ? exp.charAt(0).toUpperCase() + exp.slice(1) : exp);
+      };
+      cx(/\bit's\b/gi,      'it is');
+      cx(/\bthat's\b/gi,    'that is');
+      cx(/\blet's\b/gi,     'let us');
+      cx(/\bwe're\b/gi,     'we are');
+      cx(/\byou're\b/gi,    'you are');
+      cx(/\bthey're\b/gi,   'they are');
+      cx(/\bi'm\b/g,        'I am');
+      cx(/\bhe's\b/gi,      'he is');
+      cx(/\bshe's\b/gi,     'she is');
+      cx(/\bwhat's\b/gi,    'what is');
+      cx(/\bwhere's\b/gi,   'where is');
+      cx(/\bthere's\b/gi,   'there is');
+      cx(/\bhow's\b/gi,     'how is');
+      cx(/\bwho's\b/gi,     'who is');
+      cx(/\bhere's\b/gi,    'here is');
+      cx(/\byou've\b/gi,    'you have');
+      cx(/\bwe've\b/gi,     'we have');
+      cx(/\bi've\b/g,       'I have');
+      cx(/\bthey've\b/gi,   'they have');
+      cx(/\bcould've\b/gi,  'could have');
+      cx(/\bwould've\b/gi,  'would have');
+      cx(/\bshould've\b/gi, 'should have');
+      cx(/\bdon't\b/gi,     'do not');
+      cx(/\bdoesn't\b/gi,   'does not');
+      cx(/\bdidn't\b/gi,    'did not');
+      cx(/\bcan't\b/gi,     'cannot');
+      cx(/\bwon't\b/gi,     'will not');
+      cx(/\bwouldn't\b/gi,  'would not');
+      cx(/\bcouldn't\b/gi,  'could not');
+      cx(/\bshouldn't\b/gi, 'should not');
+      cx(/\bisn't\b/gi,     'is not');
+      cx(/\baren't\b/gi,    'are not');
+      cx(/\bwasn't\b/gi,    'was not');
+      cx(/\bweren't\b/gi,   'were not');
+      cx(/\bhasn't\b/gi,    'has not');
+      cx(/\bhaven't\b/gi,   'have not');
+      cx(/\bhadn't\b/gi,    'had not');
+      // Remove any leftover apostrophes that could still stall speech engines
+      // (possessives like "dog's" → "dogs" — slight grammar loss but no silence)
+      t = t.replace(/(\w)'s\b/g, '$1s');
+      // Collapse any double-spaces introduced by dash replacement
+      t = t.replace(/  +/g, ' ').trim();
+      return t;
+    }
+    const speechText = expandContractionsForSpeech(expressiveText);
+    const utter = new SpeechSynthesisUtterance(speechText);
     const baseRate = parseFloat(document.getElementById('ttsSpeed')?.value || 0.9);
     const energyBoost = STATE.energyLevel === 'high' ? 0.07 : STATE.energyLevel === 'low' ? -0.05 : 0;
     utter.rate = Math.max(0.7, Math.min(1.3, baseRate + energyBoost));

@@ -53,17 +53,20 @@ async function track(db: any, uid: string, childId: number | null, event: string
 }
 
 // ── Feedback text ─────────────────────────────────────────────
+// NOTE: No apostrophes/contractions here — these strings go directly
+// to TTS (both API providers and browser SpeechSynthesis fallback).
+// Browser SpeechSynthesis has a known bug that silently stops at apostrophes.
 const CORRECT_PHRASES = [
-  '✅ Amazing! That\'s right!',
-  '✅ Yes! You\'re so smart!',
+  '✅ Amazing! That is right!',
+  '✅ Yes! You are so smart!',
   '✅ Correct! Great job!',
   '✅ Woohoo! You got it!',
   '✅ Brilliant! Spot on!',
 ];
 const WRONG_PHRASES = [
-  '❌ Not quite — but great try!',
+  '❌ Not quite, but great try!',
   '❌ Almost! Keep going!',
-  '❌ Oops! Let\'s try the next one!',
+  '❌ Oops! Let us try the next one!',
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -324,6 +327,7 @@ lessons.post('/generate', async (c) => {
   if (!groqKey) return c.json({ success: false, error: 'Lesson generation not available' }, 503);
 
   const prompt = `You are a children's lesson designer. Create a fun, interactive 5-step lesson for ages ${age_group} about "${topic}" at ${difficulty} difficulty.
+IMPORTANT: All "text" fields will be spoken aloud by text-to-speech. Do NOT use apostrophes or contractions (write "Let us" not "Let's", "it is" not "it's", "you are" not "you're", etc).
 Return ONLY valid JSON in this exact format, no other text:
 {
   "title": "short fun title",
