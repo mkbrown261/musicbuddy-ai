@@ -1,8 +1,8 @@
 # Music Buddy — Full AI Child Platform
 
 ## 🌐 Live URLs
-- **Production**: https://musicbuddy-ai.pages.dev
-- **Demo (no login)**: https://musicbuddy-ai.pages.dev/demo
+- **Production**: https://music-buddy.pages.dev
+- **Demo (no login)**: https://music-buddy.pages.dev/demo
 
 ## 🎯 Platform Overview
 A fully modular AI-powered child interaction, learning, and entertainment platform with:
@@ -10,10 +10,34 @@ A fully modular AI-powered child interaction, learning, and entertainment platfo
 - **Tiered TTS** (OpenAI default → ElevenLabs premium → Amazon Polly fallback)
 - **Groq behavior engine** (age-adaptive, personality-aware, emotion-driven)
 - **Credit-based monetization** with Stripe subscriptions + one-time packs
-- **Learning system** with 7 seed lessons + AI lesson generator
+- **Learning system** with 6 seed lessons + AI lesson generator
 - **Analytics** with per-child tracking and parent dashboard
 - **Canvas animation system** (confetti, celebration, encouragement)
 - **Per-child voice preferences** (ElevenLabs 20 voices + OpenAI 6 voices)
+
+## ✅ Stability Status (v3.0.1 — 2026-03-20)
+### Phase 1-5 Stabilization Complete
+- **LESSONS module** fully rewritten with Intent Layer compliance:
+  - `ExitLesson` intent: resets state + stops TTS cleanly before navigation
+  - `ResetLessonState`: clears lesson/progress/answer guard on every start
+  - `ValidateLessonIntegrity`: checks all steps for text/options/correct before rendering
+  - TTS text always sourced from server response, never from DOM
+  - Answer buttons use `data-answer` attribute (eliminates textContent whitespace bugs)
+  - Double-submit guard (`_answering` flag) prevents race conditions on tap
+  - Double-start guard (`_loading` flag) prevents duplicate lesson loads
+  - `SYSTEM.guard` wraps all public methods (global error boundary, no white screens)
+  - Auto-advance to next step with TTS after 1.8s feedback delay
+  - Finish button shows after `is_complete` with 1.2s celebration delay
+- **WEBCAM**: 8s init timeout, metadata-load fallback, double-init guard, null-safe DOM
+- **Engagement cues**: silently skip if no session/child (no false warnings)
+- **All DOM references** null-guarded: emotionOverlays, smileCount, laughCount, etc.
+- **`stopSession` / `startSession`**: all DOM refs null-guarded, no uncaught rejections
+- **`detectBackground`**: null-guarded for all DOM refs
+- **`closeLevelUp`**: null-guarded
+- **`BILLING_V2`**: exposes `_data` getter for `SYSTEM.hasCredits()` check
+- **`SYSTEM.hasCredits`**: reads live credits + tier + trial uses from `BILLING_V2._data`
+- **`nextActionIn`** countdown: null-guarded in `init()`
+- **Server-side interpolation bug fixed**: `stopSession` template literal was evaluating `STATE` at worker startup (crash fixed)
 
 ## 💳 Monetization Tiers
 | Tier | Price | Credits | Features |
