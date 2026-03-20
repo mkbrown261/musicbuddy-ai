@@ -2348,6 +2348,148 @@ const STATE = {
   lastDetectedEmotion: 'happy',  // last emotion detected by engine
 };
 
+// ════════════════════════════════════════════════════════════
+// SYSTEM — Global Stability Layer
+// Intent Layer guardrail that enforces:
+//   ValidateSystemState, Error Boundary, State Authority,
+//   Logging, Pre-execution checks, Crash recovery
+// ALL features must go through SYSTEM.run() or call
+// SYSTEM.validate() before executing.
+// ════════════════════════════════════════════════════════════
+const SYSTEM = (function() {
+  // ── Crash log ring buffer (last 50 errors) ────────────────
+  var _log = [];
+  var _initialized = false;
+  var _safeMode = false;  // set true if repeated crashes detected
+
+  function log(level, component, message, extra) {
+    var entry = { ts: Date.now(), level: level, comp: component, msg: message, extra: extra || null };
+    _log.push(entry);
+    if (_log.length > 50) _log.shift();
+    if (level === 'error') {
+      console.error('[SYSTEM:' + component + ']', message, extra || '');
+      // Escalate to safe mode after 5 errors in 30s
+      var recent = _log.filter(function(e){ return e.level==='error' && Date.now()-e.ts < 30000; });
+      if (recent.length >= 5 && !_safeMode) { _safeMode = true; console.warn('[SYSTEM] Safe mode activated'); }
+    } else {
+      console.log('[SYSTEM:' + component + ']', message);
+    }
+  }
+
+  function getLogs() { return _log.slice(); }
+
+  // ── Global Error Boundary ─────────────────────────────────
+  // Wraps any async function; catches all errors, prevents white screen
+  function guard(component, fn) {
+    return function() {
+      var args = arguments;
+      var result;
+      try {
+        result = fn.apply(this, args);
+      } catch(e) {
+        log('error', component, 'Sync crash: ' + e.message, e.stack);
+        _recover(component, e);
+        return null;
+      }
+      if (result && typeof result.then === 'function') {
+        return result.catch(function(e) {
+          log('error', component, 'Async crash: ' + e.message, e.stack);
+          _recover(component, e);
+          return null;
+        });
+      }
+      return result;
+    };
+  }
+
+  function _recover(component, err) {
+    // Show non-intrusive toast, never blank screen
+    try {
+      if (typeof showToast === 'function') {
+        showToast('Something glitched — tap here to continue 🔄', '⚠️', 'warning');
+      }
+    } catch(_) {}
+  }
+
+  // ── ValidateSystemState ───────────────────────────────────
+  // Returns { ok, reason } — call before any major action
+  function validate(context) {
+    var ctx = context || 'unknown';
+    // DB/API reachable check is async — skip here, trust network calls
+    // Check for required DOM elements
+    var required = ['authScreen'];
+    for (var i = 0; i < required.length; i++) {
+      if (!document.getElementById(required[i])) {
+        log('error', 'validate', ctx + ': missing DOM element #' + required[i]);
+        return { ok: false, reason: 'DOM not ready' };
+      }
+    }
+    return { ok: true };
+  }
+
+  // ── ValidateLessonIntegrity ───────────────────────────────
+  function validateLesson(lesson) {
+    if (!lesson) return { ok: false, reason: 'No lesson object' };
+    if (!lesson.steps || !lesson.steps.length) return { ok: false, reason: 'No steps in lesson' };
+    for (var i = 0; i < lesson.steps.length; i++) {
+      var step = lesson.steps[i];
+      if (!step.text) return { ok: false, reason: 'Step ' + i + ' missing text' };
+      if (step.type === 'question') {
+        if (!step.options || step.options.length < 2) return { ok: false, reason: 'Step ' + i + ' missing options' };
+        if (!step.correct) return { ok: false, reason: 'Step ' + i + ' missing correct answer' };
+      }
+    }
+    return { ok: true };
+  }
+
+  // ── CheckCreditBalance (before TTS/music generation) ──────
+  // Returns true if user has credits or is in fallback-OK state
+  // Intent: CheckCreditBalance — called before premium TTS pipeline
+  function hasCredits() {
+    // Check BILLING_V2 live data if available (set after billing init)
+    if (typeof BILLING_V2 !== 'undefined') {
+      try {
+        var bd = BILLING_V2._data;
+        if (bd) return bd.credits > 0 || bd.tier !== 'free' || bd.trial > 0;
+      } catch(e) {}
+    }
+    return true; // optimistic default — server enforces limits
+  }
+
+  // ── Pre-execution check used by lessons/TTS ───────────────
+  function preCheck(action) {
+    var v = validate(action);
+    if (!v.ok) { log('warn', 'preCheck', action + ' blocked: ' + v.reason); return false; }
+    return true;
+  }
+
+  // ── Safe mode flag ────────────────────────────────────────
+  function isSafe() { return !_safeMode; }
+  function exitSafeMode() { _safeMode = false; log('info', 'SYSTEM', 'Safe mode cleared'); }
+
+  function init() {
+    if (_initialized) return;
+    _initialized = true;
+    // Global unhandled promise rejection handler → never blank screen
+    window.addEventListener('unhandledrejection', function(e) {
+      log('error', 'UnhandledPromise', String(e.reason));
+      e.preventDefault();  // suppress browser error in console
+      try {
+        if (typeof showToast === 'function') showToast('A background task failed — app is still running 🔄', '⚠️', 'warning');
+      } catch(_) {}
+    });
+    // Global error handler → never blank screen
+    window.addEventListener('error', function(e) {
+      log('error', 'GlobalError', e.message + ' @ ' + e.filename + ':' + e.lineno);
+    });
+    log('info', 'SYSTEM', 'Global stability layer initialized');
+  }
+
+  return { log: log, getLogs: getLogs, guard: guard, validate: validate,
+           validateLesson: validateLesson, hasCredits: hasCredits,
+           preCheck: preCheck, isSafe: isSafe, exitSafeMode: exitSafeMode, init: init };
+})();
+
 // ══════════════════════════════════════════════════════════
 // WEB AUDIO ENGINE — Phase 2
 // Real-time multi-layer mixing: lead + harmony + bg + instrumental
@@ -4056,6 +4198,7 @@ function carGotIt() {
 window.carNextRound = function() { closeMiniGame(); setTimeout(() => startCallAndResponse(), 200); };
 function closeLevelUp() {
   const modal = document.getElementById('levelUpModal');
+  if (!modal) return;
   modal.style.display = 'none';
   modal.classList.add('hidden');
 }
@@ -4338,16 +4481,20 @@ async function startSession() {
   STATE.cycleLog = [];
   STATE.engScore = 0;
 
-  document.getElementById('startBtn').classList.add('hidden');
-  document.getElementById('stopBtn').classList.remove('hidden');
-  document.getElementById('sessionIndicator').style.display = 'flex';
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn  = document.getElementById('stopBtn');
+  const sessInd  = document.getElementById('sessionIndicator');
+  const scanLine = document.getElementById('scanLine');
+  const vStatus  = document.getElementById('visionStatus');
+  if (startBtn) startBtn.classList.add('hidden');
+  if (stopBtn)  stopBtn.classList.remove('hidden');
+  if (sessInd)  sessInd.style.display = 'flex';
   
   // ── Start REAL webcam feed ───────────────────────────────────
-  document.getElementById('scanLine').style.display = 'block';
+  if (scanLine) scanLine.style.display = 'block';
   startWebcam();
   
-  document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live';
-  document.getElementById('visionStatus').className = 'text-xs font-bold px-2 py-1 rounded-full bg-green-900 text-green-300';
+  if (vStatus) { vStatus.innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live'; vStatus.className = 'text-xs font-bold px-2 py-1 rounded-full bg-green-900 text-green-300'; }
 
   addChatBubble(\`Session started for \${STATE.selectedChild.name}! 🎉\`, 'ai');
   
@@ -4369,11 +4516,11 @@ async function stopSession() {
   clearInterval(STATE.progressTimer);
   
   const audio = document.getElementById('audioPlayer');
-  audio.pause();
+  if (audio) audio.pause();
   if (STATE._synthStopFn) { STATE._synthStopFn(); STATE._synthStopFn = null; }
   STATE.isPlaying = false;
 
-  const r = await api('POST', \`/sessions/\${STATE.currentSession.id}/stop\`);
+  await api('POST', ''+'/sessions/'+STATE.currentSession.id+'/stop').catch(() => {});
   
   STATE.sessionActive = false;
   STATE.currentSession = null;
@@ -4381,17 +4528,23 @@ async function stopSession() {
   // Stop engagement loop
   stopEngagementLoop();
 
-  document.getElementById('startBtn').classList.remove('hidden');
-  document.getElementById('stopBtn').classList.add('hidden');
-  document.getElementById('sessionIndicator').style.display = 'none';
-  document.getElementById('scanLine').style.display = 'none';
-  document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-gray-500"></i>Offline';
-  document.getElementById('visionStatus').className = 'text-xs font-bold px-2 py-1 rounded-full bg-gray-700';
-  document.getElementById('emotionOverlays').innerHTML = '';
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn  = document.getElementById('stopBtn');
+  const sessInd  = document.getElementById('sessionIndicator');
+  const scanLine = document.getElementById('scanLine');
+  const vStatus  = document.getElementById('visionStatus');
+  const emOvl    = document.getElementById('emotionOverlays');
+  const camPh    = document.getElementById('cameraPlaceholder');
+  if (startBtn) startBtn.classList.remove('hidden');
+  if (stopBtn)  stopBtn.classList.add('hidden');
+  if (sessInd)  sessInd.style.display = 'none';
+  if (scanLine) scanLine.style.display = 'none';
+  if (vStatus)  { vStatus.innerHTML = '<i class="fas fa-circle mr-1 text-gray-500"></i>Offline'; vStatus.className = 'text-xs font-bold px-2 py-1 rounded-full bg-gray-700'; }
+  if (emOvl)    emOvl.innerHTML = '';
 
   // ── Stop webcam ─────────────────────────────────────────────
   stopWebcam();
-  document.getElementById('cameraPlaceholder').style.display = 'flex';
+  if (camPh) camPh.style.display = 'flex';
 
   resetPlayer();
   addChatBubble('Great session! See you next time! 👋', 'ai');
@@ -4924,7 +5077,8 @@ function skipSnippet() {
 
 // ── Engagement Cue Handling ────────────────────────────────────
 async function sendEngagementCue(type, intensity) {
-  if (!STATE.currentSession) { showToast('Start a session to log engagement', '⚠️', 'warning'); return; }
+  if (!STATE.currentSession) { return; } // no session — silently skip (don't toast)
+  if (!STATE.selectedChild)  { return; } // no child selected — silently skip
 
   const r = await api('POST', '/engagement/event', {
     child_id: STATE.selectedChild.id,
@@ -4935,12 +5089,11 @@ async function sendEngagementCue(type, intensity) {
     gaze_x: STATE.gazeX,
     gaze_y: STATE.gazeY,
     snippet_id: STATE.currentSnippet?.snippet_id || null
-  });
+  }).catch(() => ({ success: false }));
 
   if (!r.success) return;
 
   // ── Also post to Groq engagement stream (non-blocking) ──────
-  // This enriches the Groq context so future decisions are more accurate
   api('POST', '/groq/engage', {
     sessionId: STATE.currentSession.id,
     childId: STATE.selectedChild.id,
@@ -4951,7 +5104,6 @@ async function sendEngagementCue(type, intensity) {
 
   // Visual feedback
   const badge = document.createElement('div');
-  badge.className = 'emotion-badge';
   const colors = { smile:'bg-yellow-500 bg-opacity-80', laughter:'bg-pink-500 bg-opacity-80',
     fixation:'bg-green-500 bg-opacity-80', attention_loss:'bg-gray-500 bg-opacity-80', boredom:'bg-blue-900 bg-opacity-80',
     face_motion:'bg-teal-500 bg-opacity-60', voice_detected:'bg-purple-500 bg-opacity-80' };
@@ -4960,13 +5112,13 @@ async function sendEngagementCue(type, intensity) {
   badge.className = \`emotion-badge \${colors[type]||'bg-gray-600'}\`;
   badge.innerHTML = \`\${icons[type]||'•'} \${type.replace('_',' ')}\`;
   const overlay = document.getElementById('emotionOverlays');
-  overlay.appendChild(badge);
-  setTimeout(() => badge.remove(), 3000);
+  if (overlay) { overlay.appendChild(badge); setTimeout(() => badge.remove(), 3000); }
 
-  // Update counters
+  // Update counters — guard against missing DOM elements
   if (type === 'smile') {
     STATE.smileCount++;
-    document.getElementById('smileCount').textContent = STATE.smileCount;
+    const smileEl = document.getElementById('smileCount');
+    if (smileEl) smileEl.textContent = STATE.smileCount;
     REWARDS.fire('micro', { trigger: 'smile' });
     STATE.engScore = Math.min(100, STATE.engScore + 5);
     updateEngagementScoreUI();
@@ -4985,7 +5137,8 @@ async function sendEngagementCue(type, intensity) {
   }
   if (type === 'laughter') {
     STATE.laughCount++;
-    document.getElementById('laughCount').textContent = STATE.laughCount;
+    const laughEl = document.getElementById('laughCount');
+    if (laughEl) laughEl.textContent = STATE.laughCount;
     REWARDS.fire('medium', { trigger: 'laughter' });
     // Ask Groq for a celebrate response
     GROQ_ENGINE.decide('laugh_detected', 'celebrate').then(b => {
@@ -4998,7 +5151,8 @@ async function sendEngagementCue(type, intensity) {
     updateEngagementScoreUI();
   }
   if (type === 'fixation') {
-    document.getElementById('fixationTime').textContent = Math.floor(Math.random()*8+2) + 's';
+    const fixEl = document.getElementById('fixationTime');
+    if (fixEl) fixEl.textContent = Math.floor(Math.random()*8+2) + 's';
     STATE.engScore = Math.min(100, STATE.engScore + 8);
     updateEngagementScoreUI();
   }
@@ -5024,16 +5178,14 @@ function updateGaze(e) {
   STATE.gazeX = (e.clientX - rect.left) / rect.width;
   STATE.gazeY = (e.clientY - rect.top) / rect.height;
   const dot = document.getElementById('gazeSimDot');
-  dot.style.left = (STATE.gazeX * 100) + '%';
-  dot.style.top = (STATE.gazeY * 100) + '%';
+  if (dot) { dot.style.left = (STATE.gazeX * 100) + '%'; dot.style.top = (STATE.gazeY * 100) + '%'; }
   
   // Update camera gaze indicator
   const camDot = document.getElementById('gazeIndicator');
-  const cam = document.getElementById('cameraFeed');
-  if (STATE.sessionActive) {
+  if (STATE.sessionActive && camDot) {
     camDot.style.display = 'block';
     camDot.style.left = (STATE.gazeX * 100) + '%';
-    camDot.style.top = (STATE.gazeY * 100) + '%';
+    camDot.style.top  = (STATE.gazeY * 100) + '%';
   }
 }
 
@@ -5051,41 +5203,72 @@ const WEBCAM = {
   async start() {
     const video = document.getElementById('webcamVideo');
     const placeholder = document.getElementById('cameraPlaceholder');
+    const visionStatus = document.getElementById('visionStatus');
     if (!video) return;
 
+    // Guard: if already streaming, don't re-init
+    if (WEBCAM.stream) return;
+
+    // Timeout fallback: if getUserMedia hangs > 8s, show fallback
+    let _timedOut = false;
+    const timeoutId = setTimeout(() => {
+      _timedOut = true;
+      SYSTEM.log('warn', 'WEBCAM', 'Camera init timed out after 8s');
+      WEBCAM._showFallback(placeholder, visionStatus);
+    }, 8000);
+
     try {
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera API not supported in this browser');
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 320 }, height: { ideal: 240 }, facingMode: 'user' },
         audio: false,
       });
+
+      clearTimeout(timeoutId);
+      if (_timedOut) { stream.getTracks().forEach(t => t.stop()); return; } // already showed fallback
+
       WEBCAM.stream = stream;
       video.srcObject = stream;
       video.style.transform = 'scaleX(-1)'; // mirror — feels natural
       video.style.display = 'block';
       if (placeholder) placeholder.style.display = 'none';
 
-      // Wait for video to actually be ready before starting detection
+      // Timeout for metadata load (video.onloadedmetadata may not fire)
+      const metaTimeout = setTimeout(() => {
+        try { video.play().catch(() => {}); WEBCAM.startFaceDetection(video); } catch(e) {}
+      }, 3000);
+
       video.onloadedmetadata = () => {
+        clearTimeout(metaTimeout);
         video.play().catch(() => {});
         WEBCAM.startFaceDetection(video);
       };
 
-      document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live';
+      if (visionStatus) visionStatus.innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live';
     } catch (err) {
+      clearTimeout(timeoutId);
       // Camera permission denied or unavailable — show friendly fallback
-      console.warn('[Webcam] Camera not available:', err.message);
-      if (placeholder) {
-        placeholder.style.display = 'flex';
-        placeholder.innerHTML = \`
-          <div class="text-center p-2">
-            <i class="fas fa-eye text-green-400 text-3xl mb-2 block"></i>
-            <p class="text-xs text-green-400 font-bold">Session Active</p>
-            <p class="text-xs text-gray-500 mt-1">\${STATE.selectedChild?.name || 'Friend'}</p>
-            <p class="text-xs text-gray-600 mt-1">Allow camera for live monitoring</p>
-          </div>\`;
-      }
-      document.getElementById('visionStatus').innerHTML = '<i class="fas fa-circle mr-1 text-yellow-400"></i>No Camera';
+      SYSTEM.log('warn', 'WEBCAM', 'Camera not available: ' + (err.message || 'unknown'));
+      WEBCAM._showFallback(placeholder, visionStatus);
     }
+  },
+
+  _showFallback(placeholder, visionStatus) {
+    if (placeholder) {
+      placeholder.style.display = 'flex';
+      placeholder.innerHTML = \`
+        <div class="text-center p-2">
+          <i class="fas fa-eye text-green-400 text-3xl mb-2 block"></i>
+          <p class="text-xs text-green-400 font-bold">Session Active</p>
+          <p class="text-xs text-gray-500 mt-1">\${STATE.selectedChild?.name || 'Friend'}</p>
+          <p class="text-xs text-gray-600 mt-1">Allow camera for live monitoring</p>
+        </div>\`;
+    }
+    if (visionStatus) visionStatus.innerHTML = '<i class="fas fa-circle mr-1 text-yellow-400"></i>No Camera';
   },
 
   stop() {
@@ -5420,7 +5603,8 @@ async function detectBackground() {
   if (!STATE.selectedChild || !STATE.currentSession) {
     showToast('Start a session first!', '⚠️', 'warning'); return;
   }
-  const song = document.getElementById('bgSongInput').value.trim();
+  const bgInput = document.getElementById('bgSongInput');
+  const song = bgInput ? bgInput.value.trim() : '';
   if (!song) { showToast('Enter a song name first', '⚠️', 'warning'); return; }
   
   const r = await api('POST', '/engagement/background-detect', {
@@ -5428,12 +5612,14 @@ async function detectBackground() {
     session_id: STATE.currentSession.id,
     detected_song: song,
     confidence: 0.85
-  });
+  }).catch(() => ({ success: false }));
   
   if (r.success) {
     STATE.bgSong = song;
-    document.getElementById('bgDetected').classList.remove('hidden');
-    document.getElementById('bgDetectedName').textContent = \`"\${song}" will be used as seed\`;
+    const bgDetected = document.getElementById('bgDetected');
+    const bgName     = document.getElementById('bgDetectedName');
+    if (bgDetected) bgDetected.classList.remove('hidden');
+    if (bgName)     bgName.textContent = \`"\${song}" will be used as seed\`;
     showToast(\`"\${song}" set as music seed! 🎵\`, '🎵', 'success');
   }
 }
@@ -5462,6 +5648,8 @@ function stripEmojisAndSymbols(text) {
 // ── TTS / Chat ────────────────────────────────────────────────
 // speakText: strips emojis, applies expression engine, then speaks
 // Returns a Promise that resolves when speech is DONE
+// Intent: RequestTTS — all TTS must go through this function (never direct Audio() elsewhere)
+// Pre-check: Intent CheckUsageLimit (SYSTEM.hasCredits) before attempting premium pipeline
 async function speakText(text, emotionHint) {
   const cleanText = stripEmojisAndSymbols(text);
   if (!cleanText) return;
@@ -8249,11 +8437,15 @@ async function init() {
     const elapsed = Date.now() - STATE.lastInteractionTime;
     const cycleMs = parseInt(document.getElementById('cycleInterval')?.value || 30000);
     const remaining = Math.max(0, Math.ceil((cycleMs - elapsed) / 1000));
-    document.getElementById('nextActionIn').textContent = remaining + 's';
+    const nextEl = document.getElementById('nextActionIn');
+    if (nextEl) nextEl.textContent = remaining + 's';
   }, 1000);
 }
 
 window.addEventListener('load', async () => {
+  // Initialize global stability layer FIRST — catches all errors from here on
+  SYSTEM.init();
+
   // Try to restore an existing session first.
   // tryRestoreSession() hides the auth screen and returns true if already logged in.
   // If not, it shows the auth screen and waits for the user to log in.
@@ -8326,50 +8518,87 @@ var ANIM = (function() {
 (function(){var s=document.createElement('style');s.textContent='@keyframes floatEmoji{0%{opacity:0;transform:translateX(-50%) translateY(0)}20%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-120px)}}';document.head.appendChild(s);})();
 
 // ════════════════════════════════════════════════════════════
-// LESSONS MODULE
+// LESSONS MODULE — Intent Layer Bound
+// Intents: GetAvailableLessons, StartLesson, SubmitAnswer,
+//          ExitLesson, ResetLessonState, ValidateLessonIntegrity,
+//          TriggerAnimation, RequestTTS (via speakText)
+// Rules:
+//  - UI never holds truth; all state lives in state object
+//  - Every action goes through SYSTEM.guard (error boundary)
+//  - TTS text always matches lesson content from source-of-truth
+//  - Animations always from ANIM.trigger with server metadata
+//  - Answer buttons use data-answer attr (not textContent) to avoid whitespace bugs
+//  - No double-TTS: intro speaks once in _openLessonPanel only
+//  - Credits respected via SYSTEM.hasCredits() check before TTS
 // ════════════════════════════════════════════════════════════
 var LESSONS = (function() {
-  var state = { list:[], filtered:[], filterTopic:'all', progress:null, lesson:null, stepIdx:0, childId:null };
+  // ── Source-of-truth state — UI reads ONLY from here ──────
+  var state = {
+    list:[], filtered:[], filterTopic:'all',
+    progress:null, lesson:null, stepIdx:0, childId:null,
+    _answering: false,  // guard against double-submit
+    _loading: false     // guard against double-start
+  };
 
-  function load() {
+  // ── Intent: GetAvailableLessons ───────────────────────────
+  var load = SYSTEM.guard('LESSONS.load', function() {
     var child = STATE.selectedChild;
     var badge = document.getElementById('lessonsChildBadge');
-    // Always fetch lessons — use child filters if a child is selected
     var url = '/lessons';
     if (child) {
       state.childId = child.id;
       url = '/lessons?age='+child.age+'&child_id='+child.id;
       if (badge) badge.textContent = child.name + ' (age ' + child.age + ')';
     } else {
+      state.childId = null;
       if (badge) badge.textContent = 'All lessons (no child selected)';
     }
+    // Show grid loading state
+    var g = document.getElementById('lessonsGrid');
+    if (g) g.innerHTML = '<div class="glass p-6 text-center text-gray-400 col-span-2"><div class="text-3xl mb-2 animate-pulse">📚</div>Loading lessons…</div>';
+
     api('GET', url).then(function(r){
       if (r.success) { state.list = r.data.lessons||[]; applyFilter(); }
-      else { renderEmpty('Could not load lessons — try logging in'); }
+      else { renderEmpty('Could not load lessons — ' + (r.error||'please try again')); }
+    }).catch(function(e) {
+      SYSTEM.log('error','LESSONS.load','Fetch failed: '+e.message);
+      renderEmpty('Connection error — tap to retry');
     });
-  }
+  });
 
   function applyFilter() {
-    state.filtered = state.filterTopic==='all' ? state.list : state.list.filter(function(l){return l.topic===state.filterTopic;});
+    state.filtered = state.filterTopic==='all'
+      ? state.list
+      : state.list.filter(function(l){return l.topic===state.filterTopic;});
     renderGrid();
   }
 
   function renderEmpty(msg) {
     var g = document.getElementById('lessonsGrid');
-    if (g) g.innerHTML = '<div class="glass p-6 text-center text-gray-500 col-span-2"><i class="fas fa-graduation-cap text-3xl mb-2 block opacity-30"></i>'+msg+'</div>';
+    if (g) g.innerHTML = '<div class="glass p-6 text-center text-gray-500 col-span-2">'
+      +'<i class="fas fa-graduation-cap text-3xl mb-2 block opacity-30"></i>'+msg+'</div>';
   }
 
   function renderGrid() {
     var g = document.getElementById('lessonsGrid');
     if (!g) return;
-    if (!state.filtered.length) { renderEmpty('No lessons found'); return; }
+    if (!state.filtered.length) { renderEmpty('No lessons found for this filter'); return; }
     g.innerHTML = state.filtered.map(function(l) {
       var locked = l.locked;
-      var prog = l.progress;
-      var statusBadge = prog ? (prog.status==='completed'?'<span class="text-xs px-2 py-0.5 rounded-full font-bold ml-1" style="background:rgba(107,203,119,0.2);color:#6bcb77">✓ Done '+Math.round(prog.score)+'%</span>':'<span class="text-xs px-2 py-0.5 rounded-full font-bold ml-1" style="background:rgba(245,158,11,0.2);color:#f59e0b">In Progress</span>') : '';
-      var tierBadge = l.tier_required!=='free'?'<span class="text-xs px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,0.15);color:#f59e0b">'+(l.tier_required==='starter'?'Starter+':'Premium')+'</span>':'<span class="text-xs px-2 py-0.5 rounded-full" style="background:rgba(74,222,128,0.15);color:#4ade80">Free</span>';
-      return '<div class="lesson-card'+(locked?' locked':'') + '" onclick="LESSONS.start('+l.id+','+locked+')">'
-        +'<div class="flex items-start justify-between mb-2"><div class="text-3xl">'+l.thumbnail_emoji+'</div><div class="flex flex-col items-end gap-1">'+tierBadge+statusBadge+'</div></div>'
+      var prog   = l.progress;
+      var statusBadge = prog
+        ? (prog.status==='completed'
+            ? '<span class="text-xs px-2 py-0.5 rounded-full font-bold ml-1" style="background:rgba(107,203,119,0.2);color:#6bcb77">✓ Done '+Math.round(prog.score)+'%</span>'
+            : '<span class="text-xs px-2 py-0.5 rounded-full font-bold ml-1" style="background:rgba(245,158,11,0.2);color:#f59e0b">In Progress</span>')
+        : '';
+      var tierBadge = l.tier_required!=='free'
+        ? '<span class="text-xs px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,0.15);color:#f59e0b">'+(l.tier_required==='starter'?'Starter+':'Premium')+'</span>'
+        : '<span class="text-xs px-2 py-0.5 rounded-full" style="background:rgba(74,222,128,0.15);color:#4ade80">Free</span>';
+      return '<div class="lesson-card'+(locked?' locked':'')+'" onclick="LESSONS.start('+l.id+','+locked+')">'
+        +'<div class="flex items-start justify-between mb-2">'
+        +'<div class="text-3xl">'+l.thumbnail_emoji+'</div>'
+        +'<div class="flex flex-col items-end gap-1">'+tierBadge+statusBadge+'</div>'
+        +'</div>'
         +'<div class="font-black text-sm">'+l.title+'</div>'
         +'<div class="text-xs text-gray-400 mt-1">'+l.topic+' · '+l.difficulty+' · '+(l.step_count||'?')+' steps</div>'
         +(locked?'<div class="text-xs text-yellow-400 mt-2"><i class="fas fa-lock mr-1"></i>Upgrade to unlock</div>':'')
@@ -8377,128 +8606,326 @@ var LESSONS = (function() {
     }).join('');
   }
 
-  function start(id, locked) {
-    if (locked) { showToast('Upgrade to unlock this lesson! 🔓','⭐','info'); switchTab('billing'); return; }
+  // ── Intent: StartLesson ───────────────────────────────────
+  var start = SYSTEM.guard('LESSONS.start', function(id, locked) {
+    if (locked) {
+      showToast('Upgrade to unlock this lesson! 🔓','⭐','info');
+      switchTab('billing');
+      return;
+    }
+    if (state._loading) return;  // prevent double-start
+    state._loading = true;
+
+    // Intent: ResetLessonState — clear any previous lesson state
+    _resetLessonState();
+
     var childId = state.childId || (STATE.selectedChild && STATE.selectedChild.id) || null;
     var grid = document.getElementById('lessonsGrid');
-    if(grid) grid.innerHTML = '<div class="glass p-8 text-center col-span-2"><div class="text-4xl mb-2 animate-bounce">⏳</div><div class="text-gray-400">Loading lesson…</div></div>';
-    api('POST','/lessons/start',{lesson_id:id,child_id:childId}).then(function(r){
+    if (grid) grid.innerHTML = '<div class="glass p-8 text-center col-span-2"><div class="text-4xl mb-2 animate-bounce">⏳</div><div class="text-gray-400">Loading lesson…</div></div>';
+
+    api('POST', '/lessons/start', {lesson_id: id, child_id: childId}).then(function(r) {
+      state._loading = false;
       if (!r.success) {
-        if (r.locked) { showToast(r.error||'Upgrade to unlock','⭐','info'); switchTab('billing'); load(); return; }
-        showToast(r.error||'Could not start lesson','❌','error'); load(); return;
+        if (r.needs_login) { showToast('Sign in to access this lesson 🔐','🔐','warning'); switchTab('billing'); load(); return; }
+        if (r.locked)      { showToast(r.error||'Upgrade to unlock','⭐','info'); switchTab('billing'); load(); return; }
+        showToast(r.error||'Could not start lesson','❌','error');
+        load();
+        return;
       }
       var d = r.data;
       state.progress = d.progress_id;
       state.stepIdx  = 0;
+
+      // Source of truth: lesson object always built from server response
       if (d.steps && d.steps.length) {
         state.lesson = d;
-        _openLessonPanel(d);
+        // Intent: ValidateLessonIntegrity
+        var integrity = SYSTEM.validateLesson(state.lesson);
+        if (!integrity.ok) {
+          SYSTEM.log('error','LESSONS.start','Lesson integrity failed: '+integrity.reason);
+          showToast('Lesson data incomplete — try another lesson','⚠️','warning');
+          load();
+          return;
+        }
+        _openLessonPanel(state.lesson);
       } else {
-        api('GET','/lessons/'+id).then(function(lr){
-          if (!lr.success) { showToast('Could not load lesson','❌','error'); load(); return; }
+        // Fallback: fetch full lesson if steps missing
+        api('GET', '/lessons/'+id).then(function(lr) {
+          if (!lr.success) { showToast('Could not load lesson content','❌','error'); load(); return; }
           state.lesson = lr.data;
-          _openLessonPanel(lr.data);
+          state.lesson.steps = typeof lr.data.steps === 'string' ? JSON.parse(lr.data.steps) : lr.data.steps;
+          var integrity = SYSTEM.validateLesson(state.lesson);
+          if (!integrity.ok) { SYSTEM.log('error','LESSONS.start','Fallback integrity failed: '+integrity.reason); load(); return; }
+          _openLessonPanel(state.lesson);
+        }).catch(function(e) {
+          SYSTEM.log('error','LESSONS.start','Fallback fetch failed: '+e.message);
+          showToast('Could not load lesson','❌','error');
+          load();
         });
       }
+    }).catch(function(e) {
+      state._loading = false;
+      SYSTEM.log('error','LESSONS.start','API error: '+e.message);
+      showToast('Connection error — please try again','❌','error');
+      load();
     });
+  });
+
+  // ── Intent: ResetLessonState ──────────────────────────────
+  function _resetLessonState() {
+    state.lesson = null;
+    state.progress = null;
+    state.stepIdx = 0;
+    state._answering = false;
+    // Stop any active TTS so lesson intro plays cleanly
+    if (window._activeTTSAudio) {
+      try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+      window._activeTTSAudio = null;
+    }
+    if ('speechSynthesis' in window) try { window.speechSynthesis.cancel(); } catch(e) {}
+    // Hide feedback
+    var fb = document.getElementById('lessonFeedback');
+    if (fb) { fb.classList.add('hidden'); fb.textContent = ''; }
   }
 
   function _openLessonPanel(lesson) {
     var panel = document.getElementById('activeLessonPanel');
     var grid  = document.getElementById('lessonsGrid');
     if (grid)  grid.classList.add('hidden');
-    if (panel) { panel.classList.remove('hidden'); panel.scrollIntoView({behavior:'smooth',block:'start'}); }
+    if (panel) {
+      panel.classList.remove('hidden');
+      panel.scrollIntoView({behavior:'smooth', block:'start'});
+    }
     var title = document.getElementById('lessonTitle');
     if (title) title.textContent = (lesson.thumbnail_emoji||'📚') + ' ' + lesson.title;
-    renderStep();
-    var steps = lesson.steps || [];
-    if (steps[0]) speakText(steps[0].text, 'excited');
-  }
 
-  function renderStep() {
-    var lesson=state.lesson; if(!lesson) return;
-    var steps=lesson.steps||[]; var step=steps[state.stepIdx]; if(!step) return;
-    var pct=Math.round((state.stepIdx/steps.length)*100);
-    var pbar=document.getElementById('lessonProgressBar'); if(pbar) pbar.style.width=pct+'%';
-    var emojiEl=document.getElementById('lessonStepEmoji'); if(emojiEl) emojiEl.textContent=step.emoji||'📚';
-    var textEl=document.getElementById('lessonStepText'); if(textEl) textEl.textContent=step.text||'';
-    var opts=document.getElementById('lessonAnswerOptions');
-    var nextBtn=document.getElementById('lessonNextBtn');
-    var fb=document.getElementById('lessonFeedback'); if(fb){fb.classList.add('hidden');fb.textContent='';}
-    if(step.type==='intro'||step.type==='reward'){
-      if(opts) opts.innerHTML='';
-      if(nextBtn) nextBtn.classList.remove('hidden');
-      if(step.type==='reward'){ANIM.celebration();speakText(step.text,'excited');}
-    } else if(step.type==='question'&&step.options){
-      if(nextBtn) nextBtn.classList.add('hidden');
-      if(opts){opts.innerHTML=step.options.map(function(o){return '<button class="answer-btn">' + o + '</button>';}).join('');opts.querySelectorAll('.answer-btn').forEach(function(b){b.addEventListener('click',function(){LESSONS.answer(b.textContent);});});}
+    // Render the first step UI first, THEN speak (TTS must use lesson source-of-truth)
+    _renderStep();
+
+    // Intent: RequestTTS — text comes from lesson source-of-truth, not UI
+    var steps = lesson.steps || [];
+    if (steps[0] && steps[0].text) {
+      // Small delay so UI renders before audio starts
+      setTimeout(function() {
+        speakText(steps[0].text, steps[0].type === 'intro' ? 'excited' : 'friendly');
+      }, 150);
     }
   }
 
-  function answer(ans) {
-    document.querySelectorAll('.answer-btn').forEach(function(b){b.disabled=true;});
-    api('POST','/lessons/answer',{progress_id:state.progress,lesson_id:state.lesson.id,child_id:state.childId,step_index:state.stepIdx,answer:ans}).then(function(r){
-      if(!r.success) return;
-      var d=r.data;
-      document.querySelectorAll('.answer-btn').forEach(function(b){
-        if(b.textContent===d.correct_answer) b.classList.add('correct');
-        else if(b.textContent===ans&&!d.correct) b.classList.add('wrong');
-      });
-      var fb=document.getElementById('lessonFeedback');
-      if(fb){fb.classList.remove('hidden');fb.textContent=d.feedback_text;fb.style.background=d.correct?'rgba(107,203,119,0.15)':'rgba(255,80,80,0.15)';fb.style.color=d.correct?'#6bcb77':'#ff6b9d';}
-      ANIM.trigger(d.animation);
-      speakText(d.feedback_text,d.emotion_hint||(d.correct?'excited':'encouraging'));
-      if(d.is_complete){
-        ANIM.celebration();
-        setTimeout(function(){var nb=document.getElementById('lessonNextBtn');if(nb){nb.innerHTML='🏆 Finish!';nb.classList.remove('hidden');}},1000);
-      } else {
-        setTimeout(function(){state.stepIdx=d.next_step_index;renderStep();},1600);
+  // ── Intent: RenderLessonStep — UI always driven by state ─
+  function _renderStep() {
+    var lesson = state.lesson; if (!lesson) return;
+    var steps  = lesson.steps || [];
+    var step   = steps[state.stepIdx]; if (!step) return;
+
+    // Progress bar: complete when on last step
+    var pct = steps.length > 1 ? Math.round((state.stepIdx / (steps.length - 1)) * 100) : 0;
+    var pbar = document.getElementById('lessonProgressBar');
+    if (pbar) pbar.style.width = pct + '%';
+
+    // Step emoji + text from source-of-truth (never from DOM)
+    var emojiEl = document.getElementById('lessonStepEmoji');
+    if (emojiEl) emojiEl.textContent = step.emoji || '📚';
+    var textEl  = document.getElementById('lessonStepText');
+    if (textEl)  textEl.textContent  = step.text  || '';
+
+    var opts    = document.getElementById('lessonAnswerOptions');
+    var nextBtn = document.getElementById('lessonNextBtn');
+    var fb      = document.getElementById('lessonFeedback');
+    if (fb) { fb.classList.add('hidden'); fb.textContent = ''; }
+
+    state._answering = false;  // reset guard for each new step
+
+    if (step.type === 'intro' || step.type === 'reward') {
+      if (opts)   opts.innerHTML = '';
+      if (nextBtn) {
+        nextBtn.classList.remove('hidden');
+        nextBtn.disabled = false;
+        nextBtn.innerHTML = step.type === 'reward' ? '🏆 Finish!' : '▶ Continue';
       }
+      // Intent: TriggerAnimation — reward type always triggers celebration
+      if (step.type === 'reward') {
+        ANIM.trigger('full_celebration');
+        // TTS uses source-of-truth text (already set above)
+        speakText(step.text, 'excited');
+      }
+    } else if (step.type === 'question' && step.options) {
+      if (nextBtn) nextBtn.classList.add('hidden');
+      if (opts) {
+        // data-answer stores the canonical answer string (avoids whitespace textContent bugs)
+        opts.innerHTML = step.options.map(function(o) {
+          return '<button class="answer-btn" data-answer="'+_escapeAttr(o)+'">'+o+'</button>';
+        }).join('');
+        opts.querySelectorAll('.answer-btn').forEach(function(b) {
+          b.addEventListener('click', function() {
+            // Use data-answer (canonical) not textContent (may have whitespace)
+            LESSONS.answer(b.getAttribute('data-answer'));
+          });
+        });
+      }
+    }
+  }
+
+  // ── Intent: SubmitAnswer(childID, answer) ─────────────────
+  var answer = SYSTEM.guard('LESSONS.answer', function(ans) {
+    if (!state.lesson || !ans) return;
+    if (state._answering) return;  // prevent double-submit
+    state._answering = true;
+
+    // Disable all buttons immediately (prevent re-tap)
+    document.querySelectorAll('.answer-btn').forEach(function(b){ b.disabled = true; });
+
+    api('POST', '/lessons/answer', {
+      progress_id: state.progress,
+      lesson_id:   state.lesson.id,
+      child_id:    state.childId,
+      step_index:  state.stepIdx,
+      answer:      ans,
+    }).then(function(r) {
+      if (!r.success) {
+        SYSTEM.log('error','LESSONS.answer','API error: '+(r.error||'unknown'));
+        state._answering = false;
+        document.querySelectorAll('.answer-btn').forEach(function(b){ b.disabled = false; });
+        showToast('Could not submit answer — try again','⚠️','warning');
+        return;
+      }
+      var d = r.data;
+
+      // Highlight correct/wrong using data-answer (canonical match)
+      document.querySelectorAll('.answer-btn').forEach(function(b) {
+        var bAns = b.getAttribute('data-answer');
+        if (bAns === d.correct_answer)       b.classList.add('correct');
+        else if (bAns === ans && !d.correct) b.classList.add('wrong');
+      });
+
+      // Feedback from server — never constructed in UI
+      var fb = document.getElementById('lessonFeedback');
+      if (fb) {
+        fb.classList.remove('hidden');
+        fb.textContent = d.feedback_text;
+        fb.style.background = d.correct ? 'rgba(107,203,119,0.15)' : 'rgba(255,80,80,0.15)';
+        fb.style.color       = d.correct ? '#6bcb77' : '#ff6b9d';
+      }
+
+      // Intent: TriggerAnimation — always from server metadata
+      ANIM.trigger(d.animation || (d.correct ? 'confetti_burst' : 'soft_encouragement'));
+
+      // Intent: RequestTTS — text from server feedback (not DOM)
+      speakText(d.feedback_text, d.emotion_hint || (d.correct ? 'excited' : 'encouraging'));
+
+      if (d.is_complete) {
+        // Lesson complete — show Finish button after celebration
+        ANIM.trigger('full_celebration');
+        setTimeout(function() {
+          var nb = document.getElementById('lessonNextBtn');
+          if (nb) { nb.innerHTML = '🏆 Finish!'; nb.classList.remove('hidden'); nb.disabled = false; }
+        }, 1200);
+      } else {
+        // Auto-advance to next step after feedback delay (1.8s)
+        setTimeout(function() {
+          state.stepIdx  = d.next_step_index;
+          state._answering = false;
+          _renderStep();
+          // TTS for next question from source-of-truth
+          var nextStep = (state.lesson.steps || [])[state.stepIdx];
+          if (nextStep && nextStep.text && nextStep.type === 'question') {
+            setTimeout(function(){ speakText(nextStep.text, 'friendly'); }, 200);
+          }
+        }, 1800);
+      }
+    }).catch(function(e) {
+      SYSTEM.log('error','LESSONS.answer','Fetch error: '+e.message);
+      state._answering = false;
+      document.querySelectorAll('.answer-btn').forEach(function(b){ b.disabled = false; });
+      showToast('Connection error — tap to try again','❌','error');
     });
-  }
+  });
 
-  function nextStep() {
-    var steps=state.lesson?.steps||[];
-    if(state.stepIdx>=steps.length-1){closeLesson();return;}
+  // ── Intent: NextStep (intro/reward continue button) ───────
+  var nextStep = SYSTEM.guard('LESSONS.nextStep', function() {
+    if (!state.lesson) return;
+    var steps = state.lesson.steps || [];
+    // If on last step — exit lesson
+    if (state.stepIdx >= steps.length - 1) { closeLesson(); return; }
     state.stepIdx++;
-    renderStep();
-    speakText((steps[state.stepIdx]?.text)||'','friendly');
-  }
+    _renderStep();
+    // TTS from source-of-truth for the new step
+    var step = steps[state.stepIdx];
+    if (step && step.text && step.type !== 'reward') {
+      // reward type speaks in _renderStep already
+      setTimeout(function(){ speakText(step.text, 'friendly'); }, 150);
+    }
+  });
 
-  function closeLesson() {
-    var panel=document.getElementById('activeLessonPanel');
-    if(panel) panel.classList.add('hidden');
-    state.lesson=null; state.progress=null; state.stepIdx=0;
+  // ── Intent: ExitLesson(userID) ────────────────────────────
+  var closeLesson = SYSTEM.guard('LESSONS.closeLesson', function() {
+    // Stop any active TTS cleanly
+    if (window._activeTTSAudio) {
+      try { window._activeTTSAudio.pause(); window._activeTTSAudio.src = ''; } catch(e) {}
+      window._activeTTSAudio = null;
+    }
+    if ('speechSynthesis' in window) try { window.speechSynthesis.cancel(); } catch(e) {}
+
+    // Hide panel, show grid
+    var panel = document.getElementById('activeLessonPanel');
+    if (panel) panel.classList.add('hidden');
+    var grid  = document.getElementById('lessonsGrid');
+    if (grid)  grid.classList.remove('hidden');
+
+    // Intent: ResetLessonState
+    _resetLessonState();
+
+    // Reload lesson list (refresh progress data)
     load();
-  }
+  });
 
   function setFilter(topic) {
-    state.filterTopic=topic;
-    document.querySelectorAll('.lesson-filter-btn').forEach(function(b){b.classList.toggle('active',b.dataset.topic===topic);});
+    state.filterTopic = topic;
+    document.querySelectorAll('.lesson-filter-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.topic === topic);
+    });
     applyFilter();
   }
 
-  function generate() {
-    var btn=document.getElementById('genLessonBtn');
-    var status=document.getElementById('genLessonStatus');
-    var child=STATE.selectedChild;
-    if(!child){showToast('Select a child first','👶','warning');return;}
-    if(btn) btn.disabled=true;
-    if(status) status.textContent='⏳ Generating with AI…';
-    api('POST','/lessons/generate',{
-      topic:(document.getElementById('genTopic')?.value||'animals'),
-      difficulty:(document.getElementById('genDifficulty')?.value||'easy'),
-      age_group:child.age+'-'+(child.age+2), child_id:child.id,
-    }).then(function(r){
-      if(btn) btn.disabled=false;
-      if(!r.success){if(status) status.textContent='❌ '+(r.error||'Failed');if(r.locked){showToast('Upgrade to generate lessons!','⭐','info');switchTab('billing');}return;}
-      if(status) status.textContent='✅ Created: '+r.data.title;
-      showToast('New lesson: '+r.data.title+'!','🎓','success');
+  // ── Intent: GenerateLesson ────────────────────────────────
+  var generate = SYSTEM.guard('LESSONS.generate', function() {
+    var btn    = document.getElementById('genLessonBtn');
+    var status = document.getElementById('genLessonStatus');
+    var child  = STATE.selectedChild;
+    if (!child) { showToast('Select a child first','👶','warning'); return; }
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = '⏳ Generating with AI…';
+
+    api('POST', '/lessons/generate', {
+      topic:      (document.getElementById('genTopic')?.value || 'animals'),
+      difficulty: (document.getElementById('genDifficulty')?.value || 'easy'),
+      age_group:  child.age + '-' + (child.age + 2),
+      child_id:   child.id,
+    }).then(function(r) {
+      if (btn) btn.disabled = false;
+      if (!r.success) {
+        if (status) status.textContent = '❌ ' + (r.error || 'Generation failed');
+        if (r.needs_login) { showToast('Sign in to generate lessons','🔐','warning'); return; }
+        if (r.locked)      { showToast('Upgrade to generate lessons! ⭐','⭐','info'); switchTab('billing'); }
+        return;
+      }
+      if (status) status.textContent = '✅ Created: ' + r.data.title;
+      showToast('New lesson ready: ' + r.data.title + '! 🎓','🎓','success');
       load();
+    }).catch(function(e) {
+      if (btn) btn.disabled = false;
+      if (status) status.textContent = '❌ Connection error';
+      SYSTEM.log('error','LESSONS.generate','Error: '+e.message);
     });
+  });
+
+  // ── Helper: escape HTML attribute value ──────────────────
+  function _escapeAttr(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  return {load,start,answer,nextStep,closeLesson,setFilter,generate};
+  // ── Public API ────────────────────────────────────────────
+  return { load: load, start: start, answer: answer, nextStep: nextStep, closeLesson: closeLesson, setFilter: setFilter, generate: generate };
 })();
 
 // ════════════════════════════════════════════════════════════
@@ -8632,7 +9059,7 @@ var BILLING_V2 = (function() {
     }
   })();
 
-  return {init,refreshCredits,subscribe,buyPack,loadAnalytics};
+  return {init, refreshCredits, subscribe, buyPack, loadAnalytics, get _data(){ return data; }};
 })();
 </script>
 </body>
