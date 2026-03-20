@@ -29,6 +29,72 @@
 import type { TTSRequest, TTSResponse, VoiceConfig, TTSProvider } from './types';
 import { TIER_DEFAULTS } from './types';
 
+// ── Server-side contraction expander ──────────────────────────
+// MUST run on ALL text before it reaches any TTS provider.
+// ElevenLabs AND OpenAI TTS both truncate speech at apostrophes
+// in contractions (e.g. "it's" → only "it" is spoken).
+// This mirrors the client-side normalizeTTSText() in index.tsx.
+function expandContractionsServer(t: string): string {
+  if (!t) return t;
+  // Normalise curly/smart apostrophes → straight apostrophe first
+  t = t.replace(/[\u2018\u2019\u02BC]/g, "'");
+  // Replace em/en dash with a comma pause
+  t = t.replace(/\u2014|\u2013/g, ', ');
+
+  type Expansion = [RegExp, string];
+  const expansions: Expansion[] = [
+    [/\bit's\b/gi,      'it is'],
+    [/\bthat's\b/gi,    'that is'],
+    [/\blet's\b/gi,     'let us'],
+    [/\bwe're\b/gi,     'we are'],
+    [/\byou're\b/gi,    'you are'],
+    [/\bthey're\b/gi,   'they are'],
+    [/\bi'm\b/g,        'I am'],
+    [/\bhe's\b/gi,      'he is'],
+    [/\bshe's\b/gi,     'she is'],
+    [/\bwhat's\b/gi,    'what is'],
+    [/\bwhere's\b/gi,   'where is'],
+    [/\bthere's\b/gi,   'there is'],
+    [/\bhow's\b/gi,     'how is'],
+    [/\bwho's\b/gi,     'who is'],
+    [/\bhere's\b/gi,    'here is'],
+    [/\byou've\b/gi,    'you have'],
+    [/\bwe've\b/gi,     'we have'],
+    [/\bi've\b/g,       'I have'],
+    [/\bthey've\b/gi,   'they have'],
+    [/\bcould've\b/gi,  'could have'],
+    [/\bwould've\b/gi,  'would have'],
+    [/\bshould've\b/gi, 'should have'],
+    [/\bdon't\b/gi,     'do not'],
+    [/\bdoesn't\b/gi,   'does not'],
+    [/\bdidn't\b/gi,    'did not'],
+    [/\bcan't\b/gi,     'cannot'],
+    [/\bwon't\b/gi,     'will not'],
+    [/\bwouldn't\b/gi,  'would not'],
+    [/\bcouldn't\b/gi,  'could not'],
+    [/\bshouldn't\b/gi, 'should not'],
+    [/\bisn't\b/gi,     'is not'],
+    [/\baren't\b/gi,    'are not'],
+    [/\bwasn't\b/gi,    'was not'],
+    [/\bweren't\b/gi,   'were not'],
+    [/\bhasn't\b/gi,    'has not'],
+    [/\bhaven't\b/gi,   'have not'],
+    [/\bhadn't\b/gi,    'had not'],
+  ];
+
+  for (const [pat, exp] of expansions) {
+    t = t.replace(pat, (m: string) =>
+      m[0] === m[0].toUpperCase() && m[0] !== m[0].toLowerCase()
+        ? exp.charAt(0).toUpperCase() + exp.slice(1) : exp);
+  }
+
+  // Remove remaining possessive apostrophes (e.g. "dog's" → "dogs")
+  t = t.replace(/(\w)'s\b/g, '$1s');
+  // Collapse extra spaces left by dash replacement
+  t = t.replace(/  +/g, ' ').trim();
+  return t;
+}
+
 import { resolveVoiceTier, buildRouterContext } from './voice-router';
 import { generateCacheKey, generateTextHash, retrieveCachedAudio, cacheAudio, extendTTLIfFrequent } from './audio-cache';
 import { logUsage, recordBillingEvent, getVoicePreferences } from './usage-tracker';
@@ -173,6 +239,16 @@ export async function requestTTS(
     finalText   = personality.text;
     finalConfig = mergePersonalityIntoConfig(finalConfig, personality);
   }
+
+  // ─────────────────────────────────────────────────────────
+  // STEP 5b: Expand contractions in final text
+  //   Runs AFTER Groq personality rewrite (which may re-introduce
+  //   contractions like "it's", "let's", "you're").
+  //   ElevenLabs AND OpenAI TTS truncate speech at apostrophes —
+  //   this is the root cause of words being cut short.
+  //   Also normalises em-dashes that cause unnatural pauses.
+  // ─────────────────────────────────────────────────────────
+  finalText = expandContractionsServer(finalText);
 
   // ─────────────────────────────────────────────────────────
   // STEP 6: Generate cache key (on final text + final voice)

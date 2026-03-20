@@ -99,12 +99,35 @@ billing.get('/credits', async (c) => {
      FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 5`
   ).bind(user.id).all();
 
+  // ── TTS trial state (source of truth: tts_trial_usage table) ──
+  // This is separate from auth_users.trial_uses_remaining.
+  // The TTS system uses tts_trial_usage exclusively; we surface both
+  // so the UI can show the correct remaining voice-try count.
+  let ttsTrialRemaining = user.trial_uses_remaining; // fallback to auth_users value
+  let ttsTrialTotal = 0;
+  let ttsTrialLimit = 15;
+  try {
+    await db.prepare(
+      `INSERT OR IGNORE INTO tts_trial_usage (user_id) VALUES (?)`
+    ).bind(user.id).run();
+    const trialRow = await db.prepare(
+      `SELECT elevenlabs_total, trial_limit, trial_active FROM tts_trial_usage WHERE user_id = ?`
+    ).bind(user.id).first<any>();
+    if (trialRow) {
+      ttsTrialTotal    = trialRow.elevenlabs_total ?? 0;
+      ttsTrialLimit    = trialRow.trial_limit ?? 15;
+      ttsTrialRemaining = Math.max(0, ttsTrialLimit - ttsTrialTotal);
+    }
+  } catch (_) { /* non-fatal */ }
+
   return c.json({
     success: true,
     data: {
       credits:                user.credits,
       subscription_tier:      user.subscription_tier,
-      trial_uses_remaining:   user.trial_uses_remaining,
+      trial_uses_remaining:   ttsTrialRemaining,   // actual TTS trial remaining
+      tts_trial_total:        ttsTrialTotal,         // total ElevenLabs uses consumed
+      tts_trial_limit:        ttsTrialLimit,         // max allowed
       tier_info:              TIERS[user.subscription_tier as keyof typeof TIERS] || TIERS.free,
       subscription:           sub || null,
       recent_transactions:    txns.results || [],

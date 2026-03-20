@@ -184,8 +184,8 @@ function getMainHTML(): string {
   <title>🎵 Music Buddy – Children's Music Companion</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+  <!-- Chart.js: lazy-loaded only when analytics tab opens (avoids 200KB blocking parse) -->
+  <!-- axios removed: app uses fetch() / api() everywhere, no need for axios -->
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
     
@@ -4234,7 +4234,15 @@ function closeLevelUp() {
     setTimeout(() => n.remove(), (dur+3)*1000);
   }
   for (let i=0;i<8;i++) spawnNote();
-  setInterval(spawnNote, 3000);
+  // Cap floating notes at 12 so the DOM does not grow unboundedly
+  let _noteTimer = setInterval(function() {
+    if (notes.children.length < 12) spawnNote();
+  }, 3000);
+  // Stop spawning when tab is hidden to avoid wasting memory/CPU
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) { clearInterval(_noteTimer); _noteTimer = null; }
+    else if (!_noteTimer) { _noteTimer = setInterval(function() { if (notes.children.length < 12) spawnNote(); }, 3000); }
+  });
 })();
 
 // ── Toast ────────────────────────────────────────────────────
@@ -5653,6 +5661,67 @@ function stripEmojisAndSymbols(text) {
     .trim();
 }
 
+// ── TTS text normalizer ───────────────────────────────────────
+// Runs on ALL text before it goes to ANY TTS provider (API or browser).
+// Expands contractions, normalises punctuation, removes characters that
+// cause TTS engines to truncate or speak strangely.
+// NOTE: Also used inside the browser SpeechSynthesis fallback.
+function normalizeTTSText(t) {
+  if (!t) return t;
+  // Normalise curly/smart apostrophes to straight apostrophe
+  t = t.replace(/[\u2018\u2019\u02BC]/g, "'");
+  // Replace em/en dash with a comma pause (more natural in speech)
+  t = t.replace(/\u2014|\u2013/g, ', ');
+  // Expand contractions (preserves capitalisation)
+  const cx = (pat, exp) => {
+    t = t.replace(pat, (m) =>
+      m[0] === m[0].toUpperCase() && m[0] !== m[0].toLowerCase()
+        ? exp.charAt(0).toUpperCase() + exp.slice(1) : exp);
+  };
+  cx(/\bit's\b/gi,      'it is');
+  cx(/\bthat's\b/gi,    'that is');
+  cx(/\blet's\b/gi,     'let us');
+  cx(/\bwe're\b/gi,     'we are');
+  cx(/\byou're\b/gi,    'you are');
+  cx(/\bthey're\b/gi,   'they are');
+  cx(/\bi'm\b/g,        'I am');
+  cx(/\bhe's\b/gi,      'he is');
+  cx(/\bshe's\b/gi,     'she is');
+  cx(/\bwhat's\b/gi,    'what is');
+  cx(/\bwhere's\b/gi,   'where is');
+  cx(/\bthere's\b/gi,   'there is');
+  cx(/\bhow's\b/gi,     'how is');
+  cx(/\bwho's\b/gi,     'who is');
+  cx(/\bhere's\b/gi,    'here is');
+  cx(/\byou've\b/gi,    'you have');
+  cx(/\bwe've\b/gi,     'we have');
+  cx(/\bi've\b/g,       'I have');
+  cx(/\bthey've\b/gi,   'they have');
+  cx(/\bcould've\b/gi,  'could have');
+  cx(/\bwould've\b/gi,  'would have');
+  cx(/\bshould've\b/gi, 'should have');
+  cx(/\bdon't\b/gi,     'do not');
+  cx(/\bdoesn't\b/gi,   'does not');
+  cx(/\bdidn't\b/gi,    'did not');
+  cx(/\bcan't\b/gi,     'cannot');
+  cx(/\bwon't\b/gi,     'will not');
+  cx(/\bwouldn't\b/gi,  'would not');
+  cx(/\bcouldn't\b/gi,  'could not');
+  cx(/\bshouldn't\b/gi, 'should not');
+  cx(/\bisn't\b/gi,     'is not');
+  cx(/\baren't\b/gi,    'are not');
+  cx(/\bwasn't\b/gi,    'was not');
+  cx(/\bweren't\b/gi,   'were not');
+  cx(/\bhasn't\b/gi,    'has not');
+  cx(/\bhaven't\b/gi,   'have not');
+  cx(/\bhadn't\b/gi,    'had not');
+  // Remove remaining apostrophes (possessives like "dog's" → "dogs")
+  t = t.replace(/(\w)'s\b/g, '$1s');
+  // Collapse double-spaces left by dash replacement
+  t = t.replace(/  +/g, ' ').trim();
+  return t;
+}
+
 // ── TTS / Chat ────────────────────────────────────────────────
 // speakText: strips emojis, applies expression engine, then speaks
 // Returns a Promise that resolves when speech is DONE
@@ -5664,6 +5733,11 @@ async function speakText(text, emotionHint) {
 
   // Apply expression engine + PERFORMER for human, energetic delivery
   const expressiveText = EXPRESSOR.express(cleanText);
+
+  // Normalize ALL text before any TTS path (API or browser fallback):
+  // expands contractions, fixes em-dashes, removes apostrophes that cause
+  // TTS engines (ElevenLabs, OpenAI, browser SpeechSynthesis) to truncate.
+  const ttsText = normalizeTTSText(expressiveText);
 
   // ── Map Groq BehaviorTone → TTS emotion ───────────────────────
   // Groq returns tones like 'warm','playful','soothing','encouraging',
@@ -5693,7 +5767,7 @@ async function speakText(text, emotionHint) {
       childId:   STATE.selectedChild?.id ?? undefined,
       sessionId: STATE.currentSession?.id ?? undefined,
       data: {
-        text:        expressiveText,
+        text:        ttsText,
         userText:    text,
         emotion:     resolvedEmotion,
         style:       STATE.sessionActive ? 'children_host' : 'neutral',
@@ -5717,10 +5791,13 @@ async function speakText(text, emotionHint) {
       // Cancel any browser speech synthesis too
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 
-      // ── Trigger ambient background music ─────────────────────
-      if (r.data.ambientMusic && r.data.ambientMusic.trackUrl) {
+      // ── Trigger ambient background music (ONLY during active music sessions) ─
+      // Ambient music layers softly UNDER an active song — it must NOT auto-play
+      // for standalone TTS calls (lessons, games, feedback responses).
+      // Guard: STATE.isPlaying means the main music player has a song going.
+      if (STATE.sessionActive && STATE.isPlaying && r.data.ambientMusic && r.data.ambientMusic.trackUrl) {
         AMBIENT_MUSIC.play(r.data.ambientMusic);
-      } else {
+      } else if (STATE.sessionActive && STATE.isPlaying) {
         const clientEmotion = detectEmotionClient(text);
         AMBIENT_MUSIC.playVibe(emotionToVibe(clientEmotion));
       }
@@ -5803,9 +5880,7 @@ async function speakText(text, emotionHint) {
         ttsAudio.load();
       });
     }
-    // Fall through to Web Speech API — still play ambient
-    const clientEmotion = detectEmotionClient(text);
-    AMBIENT_MUSIC.playVibe(emotionToVibe(clientEmotion));
+    // Fall through to Web Speech API (server returned success but no audioUrl, or demo tier)
   } catch (e) {
     // Intent endpoint unavailable — fall through to browser TTS
   }
@@ -5815,68 +5890,9 @@ async function speakText(text, emotionHint) {
   window.speechSynthesis.cancel();
 
   return new Promise((resolve) => {
-    // ── Pre-process text for browser SpeechSynthesis ────────────────
-    // Chrome/Edge/Safari's SpeechSynthesisUtterance has a known bug where
-    // it stops speaking at apostrophes in contractions (e.g. "it's" → "it").
-    // Fix: expand all contractions to their full forms before passing to
-    // the utterance. Also normalise smart apostrophes and em/en dashes.
-    function expandContractionsForSpeech(t) {
-      // Normalise curly/smart apostrophes to straight apostrophe first
-      t = t.replace(/[\u2018\u2019\u02BC]/g, "'");
-      // Replace em/en dash with comma pause (more natural speech)
-      t = t.replace(/\u2014|\u2013/g, ', ');
-      // Expand contractions (case-preserving: capitalise if match starts uppercase)
-      const cx = (pat, exp) => {
-        t = t.replace(pat, (m) =>
-          m[0] === m[0].toUpperCase() && m[0] !== m[0].toLowerCase()
-            ? exp.charAt(0).toUpperCase() + exp.slice(1) : exp);
-      };
-      cx(/\bit's\b/gi,      'it is');
-      cx(/\bthat's\b/gi,    'that is');
-      cx(/\blet's\b/gi,     'let us');
-      cx(/\bwe're\b/gi,     'we are');
-      cx(/\byou're\b/gi,    'you are');
-      cx(/\bthey're\b/gi,   'they are');
-      cx(/\bi'm\b/g,        'I am');
-      cx(/\bhe's\b/gi,      'he is');
-      cx(/\bshe's\b/gi,     'she is');
-      cx(/\bwhat's\b/gi,    'what is');
-      cx(/\bwhere's\b/gi,   'where is');
-      cx(/\bthere's\b/gi,   'there is');
-      cx(/\bhow's\b/gi,     'how is');
-      cx(/\bwho's\b/gi,     'who is');
-      cx(/\bhere's\b/gi,    'here is');
-      cx(/\byou've\b/gi,    'you have');
-      cx(/\bwe've\b/gi,     'we have');
-      cx(/\bi've\b/g,       'I have');
-      cx(/\bthey've\b/gi,   'they have');
-      cx(/\bcould've\b/gi,  'could have');
-      cx(/\bwould've\b/gi,  'would have');
-      cx(/\bshould've\b/gi, 'should have');
-      cx(/\bdon't\b/gi,     'do not');
-      cx(/\bdoesn't\b/gi,   'does not');
-      cx(/\bdidn't\b/gi,    'did not');
-      cx(/\bcan't\b/gi,     'cannot');
-      cx(/\bwon't\b/gi,     'will not');
-      cx(/\bwouldn't\b/gi,  'would not');
-      cx(/\bcouldn't\b/gi,  'could not');
-      cx(/\bshouldn't\b/gi, 'should not');
-      cx(/\bisn't\b/gi,     'is not');
-      cx(/\baren't\b/gi,    'are not');
-      cx(/\bwasn't\b/gi,    'was not');
-      cx(/\bweren't\b/gi,   'were not');
-      cx(/\bhasn't\b/gi,    'has not');
-      cx(/\bhaven't\b/gi,   'have not');
-      cx(/\bhadn't\b/gi,    'had not');
-      // Remove any leftover apostrophes that could still stall speech engines
-      // (possessives like "dog's" → "dogs" — slight grammar loss but no silence)
-      t = t.replace(/(\w)'s\b/g, '$1s');
-      // Collapse any double-spaces introduced by dash replacement
-      t = t.replace(/  +/g, ' ').trim();
-      return t;
-    }
-    const speechText = expandContractionsForSpeech(expressiveText);
-    const utter = new SpeechSynthesisUtterance(speechText);
+    // ttsText was already normalized by normalizeTTSText() above — contractions
+    // expanded, em-dashes replaced, apostrophes removed. Pass it directly.
+    const utter = new SpeechSynthesisUtterance(ttsText);
     const baseRate = parseFloat(document.getElementById('ttsSpeed')?.value || 0.9);
     const energyBoost = STATE.energyLevel === 'high' ? 0.07 : STATE.energyLevel === 'low' ? -0.05 : 0;
     utter.rate = Math.max(0.7, Math.min(1.3, baseRate + energyBoost));
@@ -5903,7 +5919,7 @@ async function speakText(text, emotionHint) {
     const watchdog = setTimeout(() => {
       window.speechSynthesis.cancel();
       resolve();
-    }, (cleanText.length / 10 * 1000) + 4000);
+    }, (ttsText.length / 10 * 1000) + 4000);
     utter.onend  = () => { clearTimeout(watchdog); resolve(); };
     utter.onerror = () => { clearTimeout(watchdog); resolve(); };
   });
@@ -6051,10 +6067,11 @@ async function loadDashboard(childId) {
   if (d.screen_time_alert) document.getElementById('screenTimeAlert').classList.remove('hidden');
   else document.getElementById('screenTimeAlert').classList.add('hidden');
 
-  // Engagement chart
-  const ctx = document.getElementById('engagementChart').getContext('2d');
-  if (window._engChart) window._engChart.destroy();
-  window._engChart = new Chart(ctx, {
+  // Engagement chart — lazy-load Chart.js only now (first time analytics opens)
+  function _renderEngChart() {
+    const ctx = document.getElementById('engagementChart').getContext('2d');
+    if (window._engChart) window._engChart.destroy();
+    window._engChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels: ['Smiles', 'Laughs', 'Focus', 'Neutral'],
@@ -6076,6 +6093,16 @@ async function loadDashboard(childId) {
       cutout: '65%'
     }
   });
+  }
+  // Lazy-load Chart.js script if not yet loaded, then render
+  if (typeof Chart === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+    s.onload = _renderEngChart;
+    document.head.appendChild(s);
+  } else {
+    _renderEngChart();
+  }
 
   // Recommendations
   const recs = document.getElementById('recommendationsList');
@@ -8474,11 +8501,27 @@ async function init() {
   // Show credits header
   const creditsWrap = document.getElementById('creditsHeaderWrap');
   if (creditsWrap) creditsWrap.classList.remove('hidden');
-  // Load credits count
+  // Load credits count — uses tts_trial_remaining from the correct tts_trial_usage table
   api('GET', '/billing/credits').then((cr) => {
     if (cr.success) {
       const el = document.getElementById('creditsDisplay');
-      if (el) el.textContent = cr.data.credits + ' cr';
+      if (el) {
+        const credits = cr.data.credits ?? 0;
+        const voiceTries = cr.data.trial_uses_remaining ?? 0;
+        // Show: "3 cr · 15 voice" so user can see both at a glance
+        el.textContent = credits + ' cr';
+        el.title = credits + ' song credits · ' + voiceTries + ' voice tries remaining';
+      }
+      // Also update BILLING_V2 local data if loaded
+      if (typeof BILLING_V2 !== 'undefined') {
+        try {
+          var bd = BILLING_V2._data;
+          if (bd) {
+            bd.credits = cr.data.credits ?? bd.credits;
+            bd.trial   = cr.data.trial_uses_remaining ?? bd.trial;
+          }
+        } catch(e) {}
+      }
     }
   });
 
@@ -8525,6 +8568,48 @@ window.addEventListener('load', async () => {
     init();
   }
   // else: auth screen is visible; init() will be called after login
+});
+
+// ── Global tab-visibility resource manager ────────────────────
+// When the user switches away from this tab, pause heavy operations
+// (webcam pixel analysis, engagement loop) to prevent the browser
+// from running out of memory and blanking other tabs.
+// They resume automatically when the tab becomes visible again.
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) {
+    // Tab hidden — pause expensive operations
+    if (typeof WEBCAM !== 'undefined' && WEBCAM.faceCheckInterval) {
+      clearInterval(WEBCAM.faceCheckInterval);
+      WEBCAM.faceCheckInterval = null;
+    }
+    // Pause engagement loop
+    if (typeof stopEngagementLoop === 'function') stopEngagementLoop();
+    // Suspend any idle audio contexts to free OS audio resources
+    try {
+      if (typeof VOICE_PROCESSOR !== 'undefined' && VOICE_PROCESSOR.ctx &&
+          VOICE_PROCESSOR.ctx.state === 'running') {
+        VOICE_PROCESSOR.ctx.suspend().catch(function(){});
+      }
+    } catch(e) {}
+  } else {
+    // Tab visible again — resume if session is active
+    if (typeof STATE !== 'undefined' && STATE.sessionActive) {
+      // Restart face detection if webcam is streaming but interval was paused
+      if (typeof WEBCAM !== 'undefined' && WEBCAM.stream && !WEBCAM.faceCheckInterval) {
+        var video = document.getElementById('webcamVideo');
+        if (video) WEBCAM.startFaceDetection(video);
+      }
+      // Restart engagement loop
+      if (typeof startEngagementLoop === 'function') startEngagementLoop();
+      // Resume audio context
+      try {
+        if (typeof VOICE_PROCESSOR !== 'undefined' && VOICE_PROCESSOR.ctx &&
+            VOICE_PROCESSOR.ctx.state === 'suspended') {
+          VOICE_PROCESSOR.ctx.resume().catch(function(){});
+        }
+      } catch(e) {}
+    }
+  }
 });
 
 // ════════════════════════════════════════════════════════════
@@ -9151,8 +9236,12 @@ var BILLING_V2 = (function() {
       data.trial=r.data.trial_uses_remaining||0; data.packs=r.data.credit_packs||[];
       data.transactions=r.data.recent_transactions||[];
       renderAll();
+      // Update header display: show song credits + tooltip with voice tries
       var el=document.getElementById('creditsDisplay');
-      if(el) el.textContent=data.credits+' credits';
+      if(el) {
+        el.textContent=data.credits+' cr';
+        el.title=data.credits+' song credits · '+data.trial+' voice tries remaining';
+      }
     });
   }
 
@@ -9167,7 +9256,7 @@ var BILLING_V2 = (function() {
   function renderPlans(){
     var el=document.getElementById('billingPlanCards'); if(!el) return;
     var plans=[
-      {id:'free',   name:'Free',    price:'$0',    credits:'3 lifetime', features:['Free games','5 premium TTS trials','Basic songs']},
+      {id:'free',   name:'Free',    price:'$0',    credits:'3 lifetime', features:['Free games','15 premium voice trials','Basic songs']},
       {id:'starter',name:'Starter', price:'$4.99', credits:'15/month',   features:['All free features','Lessons access','15 credits/month','AI song gen']},
       {id:'premium',name:'Premium', price:'$9.99', credits:'30/month',   features:['Everything in Starter','30 credits/month','Lesson generator','Priority TTS']},
     ];
