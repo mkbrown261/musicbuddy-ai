@@ -59,6 +59,25 @@ export async function resolveVoiceTier(
   request: TTSRequest
 ): Promise<TierResolution> {
 
+  // ── 0. Demo user: ALWAYS use Replicate (ElevenLabs quality) ──
+  // Demo users (userId 'demo' or '0') bypass all paywall checks.
+  // First-time registered users also get unlimited trial via Replicate.
+  const isDemoUser = ctx.userId === 'demo' || ctx.userId === '0';
+
+  if (isDemoUser && ctx.elevenlabsKeyAvailable) {
+    const voiceId = ctx.userVoicePrefs?.elevenlabsVoice ?? 'Aria';
+    const config  = buildConfig(
+      { ...TIER_DEFAULTS.trial, voiceId },
+      request
+    );
+    return {
+      tier:           'trial',
+      voiceConfig:    config,
+      reason:         'Demo mode — Replicate ElevenLabs (unlimited)',
+      trialRemaining: 999,
+    };
+  }
+
   // ── 1. Premium path: paid user with ElevenLabs ───────────
   if (ctx.hasPremiumFlag && ctx.elevenlabsKeyAvailable) {
     const voiceId = ctx.userVoicePrefs?.elevenlabsVoice

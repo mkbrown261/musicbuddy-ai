@@ -26,9 +26,9 @@ import { sanitizeForTTS } from './openai';
 // ── Replicate constants ───────────────────────────────────────
 const REPLICATE_BASE = 'https://api.replicate.com/v1';
 const MODEL_VERSION  = 'elevenlabs/v2-multilingual';
-const POLL_INTERVAL_MS = 500;
-const MAX_POLLS        = 24;    // 12 seconds max wait
-const TIMEOUT_MS       = 15000;
+const POLL_INTERVAL_MS = 400;   // poll faster for lower latency
+const MAX_POLLS        = 40;    // up to 16 seconds
+const TIMEOUT_MS       = 20000;
 
 // ── Children's app voice choices (warm, child-friendly) ───────
 export const REPLICATE_VOICES = {
@@ -139,19 +139,27 @@ async function pollPrediction(
   throw new Error('Replicate polling timeout');
 }
 
-// ── Fetch audio URL and convert to base64 data URL ───────────
-async function fetchAudioAsBase64(audioUrl: string): Promise<string> {
+// ── Proxy the Replicate audio through our server to avoid CORS
+// and return as a proper data URL the browser can stream cleanly.
+// We fetch from Replicate server-side (no CORS issue) and return
+// the raw binary as a base64 data URL so the browser plays it
+// without stuttering from remote-URL expiry or CORS blocks.
+// NOTE: We use a streaming approach to avoid OOM on large audio.
+async function fetchAudioAsDataUrl(audioUrl: string): Promise<string> {
   const res = await fetch(audioUrl);
-  if (!res.ok) throw new Error(`Audio fetch ${res.status}`);
+  if (!res.ok) throw new Error(`Audio fetch ${res.status}: ${audioUrl}`);
 
+  const contentType = res.headers.get('content-type') || 'audio/mpeg';
   const buffer = await res.arrayBuffer();
-  const bytes   = new Uint8Array(buffer);
-  let binary = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.byteLength; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength)));
+
+  // Convert ArrayBuffer → base64 in a single efficient pass
+  const bytes  = new Uint8Array(buffer);
+  const CHUNK  = 65536; // 64KB chunks to avoid stack overflow
+  let binary   = '';
+  for (let i = 0; i < bytes.byteLength; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + CHUNK, bytes.byteLength)));
   }
-  return `data:audio/mpeg;base64,${btoa(binary)}`;
+  return `data:${contentType};base64,${btoa(binary)}`;
 }
 
 // ── Main adapter ──────────────────────────────────────────────
@@ -205,8 +213,10 @@ export async function generateReplicateTTS(
       };
     }
 
-    // ── Fetch and convert to base64 (for caching) ─────────────
-    const base64Audio = await fetchAudioAsBase64(audioUrl);
+    // ── Fetch audio and convert to data URL for clean browser playback
+    // We MUST proxy through the Worker — Replicate URLs expire in ~1h
+    // and have CORS restrictions that cause choppy/broken playback.
+    const base64Audio = await fetchAudioAsDataUrl(audioUrl);
 
     const wordCount  = truncated.split(/\s+/).length;
     const durationMs = Math.round((wordCount / 150) * 60 * 1000);

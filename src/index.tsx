@@ -75,6 +75,45 @@ app.get('/', (c) => {
   return c.html(getMainHTML())
 })
 
+// ── /demo — standalone demo page, always uses Replicate TTS ──
+app.get('/demo', (c) => {
+  return c.html(getDemoHTML())
+})
+
+// ── /api/demo/tts — demo TTS endpoint, always Replicate, no auth ──
+app.post('/api/demo/tts', async (c) => {
+  const db = c.env.DB
+  if (!c.env.REPLICATE_API_KEY) {
+    return c.json({ success: false, error: 'Replicate not configured' }, 503)
+  }
+  let body: any
+  try { body = await c.req.json() } catch {
+    return c.json({ success: false, error: 'Invalid JSON' }, 400)
+  }
+  const { text, emotion, voice } = body
+  if (!text?.trim()) return c.json({ success: false, error: 'text required' }, 400)
+
+  const { generateReplicateTTS } = await import('./lib/tts/providers/replicate')
+  const config: any = {
+    provider:   'elevenlabs',
+    voiceId:    voice || 'aria',
+    emotion:    emotion || 'friendly',
+    style:      'children_host',
+    stability:  0.35,
+    styleBoost: 0.75,
+    similarity: 0.60,
+  }
+  try {
+    const result = await generateReplicateTTS(text.slice(0, 500), config, c.env.REPLICATE_API_KEY)
+    if (result.audioUrl) {
+      return c.json({ success: true, audioUrl: result.audioUrl, voice: result.voiceId, provider: 'replicate' })
+    }
+    return c.json({ success: false, error: result.error || 'No audio generated' })
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500)
+  }
+})
+
 // Catch-all for SPA routing
 app.get('*', (c) => {
   const path = c.req.path
@@ -5239,19 +5278,62 @@ async function speakText(text, emotionHint) {
       }
 
       return new Promise((resolve) => {
-        const ttsAudio = new Audio(r.data.audioUrl);
+        const vol = (parseInt(document.getElementById('masterVolume')?.value || '70')) / 100;
+        const ttsAudio = new Audio();
+        ttsAudio.preload = 'auto';
+        ttsAudio.volume  = vol;
         window._activeTTSAudio = ttsAudio;
-        ttsAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
-        ttsAudio.onended = () => {
+
+        const cleanup = () => {
           if (window._activeTTSAudio === ttsAudio) window._activeTTSAudio = null;
+          ttsAudio.src = '';
+        };
+
+        ttsAudio.onended = () => {
+          cleanup();
           if (STATE.isPlaying && bgAudio) {
-            bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || 70)) / 100;
+            bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || '70')) / 100;
           }
           AMBIENT_MUSIC.fadeOut(2000);
           resolve();
         };
-        ttsAudio.onerror = () => { if (window._activeTTSAudio === ttsAudio) window._activeTTSAudio = null; resolve(); };
-        ttsAudio.play().catch(() => { if (window._activeTTSAudio === ttsAudio) window._activeTTSAudio = null; resolve(); });
+        ttsAudio.onerror = (e) => {
+          console.warn('[TTS] Audio error', e);
+          cleanup();
+          resolve();
+        };
+
+        // Wait for enough data before playing to prevent stuttering
+        const tryPlay = () => {
+          ttsAudio.play().catch((e) => {
+            console.warn('[TTS] play() rejected', e);
+            cleanup();
+            resolve();
+          });
+        };
+
+        // canplaythrough = browser has buffered enough to play without interruption
+        ttsAudio.addEventListener('canplaythrough', tryPlay, { once: true });
+
+        // Fallback: if canplaythrough never fires within 8s, play anyway
+        const fallbackTimer = setTimeout(() => {
+          ttsAudio.removeEventListener('canplaythrough', tryPlay);
+          tryPlay();
+        }, 8000);
+
+        ttsAudio.onended = () => {
+          clearTimeout(fallbackTimer);
+          cleanup();
+          if (STATE.isPlaying && bgAudio) {
+            bgAudio.volume = (parseInt(document.getElementById('masterVolume')?.value || '70')) / 100;
+          }
+          AMBIENT_MUSIC.fadeOut(2000);
+          resolve();
+        };
+
+        // Set src AFTER attaching listeners
+        ttsAudio.src = r.data.audioUrl;
+        ttsAudio.load();
       });
     }
     // Fall through to Web Speech API — still play ambient
@@ -7901,6 +7983,382 @@ window.addEventListener('load', async () => {
   }
   // else: auth screen is visible; init() will be called after login
 });
+</script>
+</body>
+</html>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// /demo — Standalone Demo Page
+// Always uses Replicate TTS, no login required.
+// Shows the full voice/TTS experience so visitors can try
+// before hitting the paywall.
+// ════════════════════════════════════════════════════════════
+function getDemoHTML(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🎵 MusicBuddy AI — Try It Free</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: linear-gradient(135deg, #0f0f1a 0%, #1a0a2e 50%, #0d1117 100%);
+      min-height: 100vh; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .glass { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; }
+    .btn-pink {
+      background: linear-gradient(135deg, #ff6b9d, #ff4081);
+      border: none; border-radius: 14px; color: white; font-weight: 900;
+      cursor: pointer; transition: all 0.2s; padding: 14px 28px; font-size: 1rem;
+    }
+    .btn-pink:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255,107,157,0.4); }
+    .btn-pink:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-secondary {
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px; color: white; font-weight: 700; cursor: pointer;
+      transition: all 0.2s; padding: 10px 20px;
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.14); }
+    .btn-secondary.active { background: rgba(255,107,157,0.2); border-color: #ff6b9d; }
+    .voice-card {
+      background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 16px; cursor: pointer; transition: all 0.2s; padding: 14px;
+      text-align: center;
+    }
+    .voice-card:hover { border-color: rgba(255,107,157,0.5); background: rgba(255,107,157,0.08); }
+    .voice-card.selected { border-color: #ff6b9d; background: rgba(255,107,157,0.15); }
+    .waveform { display: flex; align-items: center; gap: 3px; height: 40px; }
+    .waveform .bar {
+      width: 4px; border-radius: 2px; background: #ff6b9d;
+      animation: wave 1.2s ease-in-out infinite;
+    }
+    .waveform .bar:nth-child(2)  { animation-delay: 0.1s; }
+    .waveform .bar:nth-child(3)  { animation-delay: 0.2s; }
+    .waveform .bar:nth-child(4)  { animation-delay: 0.3s; }
+    .waveform .bar:nth-child(5)  { animation-delay: 0.4s; }
+    .waveform .bar:nth-child(6)  { animation-delay: 0.2s; }
+    .waveform .bar:nth-child(7)  { animation-delay: 0.1s; }
+    @keyframes wave {
+      0%, 100% { height: 8px; }
+      50% { height: 32px; }
+    }
+    .waveform.paused .bar { animation-play-state: paused; height: 8px; }
+    .pulse { animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.05);opacity:0.85} }
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 999;
+      background: #1e1e2e; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px; padding: 12px 20px; font-size: 0.85rem;
+      transform: translateY(80px); opacity: 0; transition: all 0.3s; max-width: 320px;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    input[type=text], textarea {
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px; color: white; padding: 12px 16px; width: 100%;
+      font-size: 0.95rem; outline: none; transition: border-color 0.2s;
+    }
+    input[type=text]:focus, textarea:focus { border-color: #ff6b9d; }
+    textarea { resize: vertical; min-height: 80px; }
+    .spinner { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="max-w-2xl mx-auto px-4 pt-10 pb-6">
+    <div class="text-center mb-8">
+      <div class="text-5xl mb-3 pulse">🎵</div>
+      <h1 class="text-3xl font-black mb-2" style="background:linear-gradient(135deg,#ff6b9d,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent">
+        MusicBuddy AI
+      </h1>
+      <p class="text-gray-400 text-sm">Try our ElevenLabs-quality voice — no account needed</p>
+      <div class="inline-flex items-center gap-2 mt-3 px-4 py-1.5 rounded-full text-xs font-bold"
+        style="background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.3)">
+        <span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+        Powered by Replicate × ElevenLabs — Free Demo
+      </div>
+    </div>
+
+    <!-- Voice picker -->
+    <div class="glass p-5 mb-4">
+      <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Choose a Voice</div>
+      <div class="grid grid-cols-2 gap-2 sm:grid-cols-4" id="voiceGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- Preset phrases -->
+    <div class="glass p-5 mb-4">
+      <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Quick Phrases</div>
+      <div class="flex flex-wrap gap-2" id="presetGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- Custom text -->
+    <div class="glass p-5 mb-4">
+      <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Or Type Your Own</div>
+      <textarea id="customText" placeholder="Type anything for MusicBuddy to say..."></textarea>
+    </div>
+
+    <!-- Emotion picker -->
+    <div class="glass p-5 mb-6">
+      <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Emotion</div>
+      <div class="flex flex-wrap gap-2" id="emotionGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- Play button + waveform -->
+    <div class="text-center mb-6">
+      <button id="speakBtn" class="btn-pink text-lg px-10 py-4" onclick="demoSpeak()">
+        <i class="fas fa-play mr-2"></i> Hear It!
+      </button>
+      <div id="waveWrap" class="hidden mt-5 justify-center">
+        <div class="waveform paused" id="waveform">
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+      </div>
+      <div id="statusText" class="text-xs text-gray-500 mt-3"></div>
+    </div>
+
+    <!-- CTA -->
+    <div class="glass p-6 text-center" style="background:rgba(255,107,157,0.07);border-color:rgba(255,107,157,0.25)">
+      <div class="text-2xl mb-2">✨</div>
+      <div class="font-black text-lg mb-1">Love what you hear?</div>
+      <div class="text-gray-400 text-sm mb-4">Get 30 free voice uses + full app access — no credit card needed for trial.</div>
+      <div class="flex gap-3 justify-center flex-wrap">
+        <a href="/" class="btn-pink">
+          <i class="fas fa-rocket mr-2"></i> Start Free Trial
+        </a>
+        <button class="btn-secondary" onclick="demoSpeak()">
+          <i class="fas fa-redo mr-2"></i> Try Again
+        </button>
+      </div>
+      <div class="mt-4 text-xs text-gray-500">
+        Then: $4.99/mo for 15 credits · $9.99/mo for 30 credits + full lessons
+      </div>
+    </div>
+
+    <div class="text-center mt-6 text-xs text-gray-600">
+      <a href="/" class="hover:text-gray-400 transition-colors">← Back to full app</a>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+<script>
+(function() {
+  // ── Config ────────────────────────────────────────────────
+  var VOICES = [
+    { id: 'aria',     name: 'Aria',     emoji: '🌸', tag: 'Warm & Nurturing' },
+    { id: 'charlotte',name: 'Charlotte',emoji: '⚡', tag: 'Bright & Cheerful' },
+    { id: 'laura',    name: 'Laura',    emoji: '🌙', tag: 'Gentle & Soothing' },
+    { id: 'jessica',  name: 'Jessica',  emoji: '🎉', tag: 'Fun & Upbeat' },
+    { id: 'charlie',  name: 'Charlie',  emoji: '😊', tag: 'Friendly Male' },
+    { id: 'liam',     name: 'Liam',     emoji: '🦁', tag: 'Warm Encourager' },
+    { id: 'matilda',  name: 'Matilda',  emoji: '🫧', tag: 'Playful & Light' },
+    { id: 'sarah',    name: 'Sarah',    emoji: '💚', tag: 'Soft & Friendly' },
+  ];
+
+  var PRESETS = [
+    { text: "Wooooah, you are SO smart! I can't believe how amazing you are!", emotion: 'excited' },
+    { text: "Let's sing a happy song together! La la la, music is magic!", emotion: 'singing' },
+    { text: "Hey there superstar! Are you ready to have the BEST time ever?", emotion: 'excited' },
+    { text: "Time for sleepy music... close your eyes and float away on the clouds.", emotion: 'calm' },
+    { text: "You did it! I'm SO proud of you! You're a champion!", emotion: 'excited' },
+    { text: "Can you clap your hands? One, two, three — let's go!", emotion: 'friendly' },
+  ];
+
+  var EMOTIONS = [
+    { id: 'excited',     label: '🔥 Excited' },
+    { id: 'friendly',    label: '😊 Friendly' },
+    { id: 'calm',        label: '🌙 Calm' },
+    { id: 'singing',     label: '🎵 Singing' },
+    { id: 'encouraging', label: '💪 Encouraging' },
+    { id: 'whisper',     label: '🤫 Whisper' },
+  ];
+
+  var selectedVoice   = 'aria';
+  var selectedEmotion = 'excited';
+  var currentAudio    = null;
+  var isPlaying       = false;
+
+  // ── Render voice cards ────────────────────────────────────
+  function renderVoices() {
+    var grid = document.getElementById('voiceGrid');
+    VOICES.forEach(function(v) {
+      var card = document.createElement('div');
+      card.className = 'voice-card' + (v.id === selectedVoice ? ' selected' : '');
+      card.id = 'vc-' + v.id;
+      card.innerHTML = '<div class="text-2xl mb-1">' + v.emoji + '</div>' +
+        '<div class="font-black text-xs">' + v.name + '</div>' +
+        '<div class="text-xs mt-0.5" style="color:#aaa">' + v.tag + '</div>';
+      card.onclick = function() { selectVoice(v.id); };
+      grid.appendChild(card);
+    });
+  }
+
+  function selectVoice(id) {
+    selectedVoice = id;
+    document.querySelectorAll('.voice-card').forEach(function(c) { c.classList.remove('selected'); });
+    var el = document.getElementById('vc-' + id);
+    if (el) el.classList.add('selected');
+  }
+
+  // ── Render preset phrases ─────────────────────────────────
+  function renderPresets() {
+    var grid = document.getElementById('presetGrid');
+    PRESETS.forEach(function(p, i) {
+      var btn = document.createElement('button');
+      btn.className = 'btn-secondary text-xs';
+      btn.textContent = p.text.slice(0, 38) + '…';
+      btn.title = p.text;
+      btn.onclick = function() {
+        document.getElementById('customText').value = p.text;
+        selectedEmotion = p.emotion;
+        document.querySelectorAll('.emotion-btn').forEach(function(b) { b.classList.remove('active'); });
+        var eb = document.getElementById('em-' + p.emotion);
+        if (eb) eb.classList.add('active');
+        demoSpeak();
+      };
+      grid.appendChild(btn);
+    });
+  }
+
+  // ── Render emotion picker ─────────────────────────────────
+  function renderEmotions() {
+    var grid = document.getElementById('emotionGrid');
+    EMOTIONS.forEach(function(e) {
+      var btn = document.createElement('button');
+      btn.className = 'btn-secondary emotion-btn text-xs' + (e.id === selectedEmotion ? ' active' : '');
+      btn.id = 'em-' + e.id;
+      btn.textContent = e.label;
+      btn.onclick = function() {
+        selectedEmotion = e.id;
+        document.querySelectorAll('.emotion-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+      };
+      grid.appendChild(btn);
+    });
+  }
+
+  // ── Toast ─────────────────────────────────────────────────
+  function toast(msg, emoji) {
+    var el = document.getElementById('toast');
+    el.textContent = (emoji ? emoji + '  ' : '') + msg;
+    el.classList.add('show');
+    setTimeout(function() { el.classList.remove('show'); }, 3000);
+  }
+
+  // ── Waveform ──────────────────────────────────────────────
+  function setWave(playing) {
+    var wrap = document.getElementById('waveWrap');
+    var wf   = document.getElementById('waveform');
+    if (playing) {
+      wrap.style.display = 'flex';
+      wrap.classList.remove('hidden');
+      wf.classList.remove('paused');
+    } else {
+      wf.classList.add('paused');
+      setTimeout(function() { wrap.classList.add('hidden'); }, 600);
+    }
+  }
+
+  // ── Main speak function ───────────────────────────────────
+  window.demoSpeak = function() {
+    var textEl = document.getElementById('customText');
+    var text = textEl.value.trim() || PRESETS[0].text;
+    if (!text) { toast('Type something first!', '✏️'); return; }
+
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.src = '';
+      currentAudio = null;
+    }
+
+    var btn    = document.getElementById('speakBtn');
+    var status = document.getElementById('statusText');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner spinner mr-2"></i> Generating…';
+    status.textContent = '⏳ Connecting to ElevenLabs via Replicate…';
+    setWave(false);
+
+    fetch('/api/demo/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, emotion: selectedEmotion, voice: selectedVoice }),
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-play mr-2"></i> Hear It!';
+
+      if (!data.success || !data.audioUrl) {
+        status.textContent = '❌ ' + (data.error || 'Could not generate audio');
+        toast('TTS failed — ' + (data.error || 'unknown error'), '❌');
+        return;
+      }
+
+      status.textContent = '✅ ' + data.voice + ' via Replicate ElevenLabs';
+      setWave(true);
+
+      var audio = new Audio();
+      audio.preload = 'auto';
+      audio.volume  = 0.9;
+      currentAudio  = audio;
+
+      audio.addEventListener('canplaythrough', function() {
+        audio.play().catch(function() {
+          toast('Browser blocked autoplay — tap again!', '🔊');
+          setWave(false);
+        });
+      }, { once: true });
+
+      setTimeout(function() {
+        if (audio.paused && audio.readyState < 3) audio.play().catch(function(){});
+      }, 6000);
+
+      audio.onended = function() {
+        setWave(false);
+        currentAudio = null;
+        status.textContent = '▶ Play again or try a different voice!';
+      };
+      audio.onerror = function() {
+        setWave(false);
+        status.textContent = '❌ Audio playback failed';
+        toast('Audio error — try again', '❌');
+      };
+
+      audio.src = data.audioUrl;
+      audio.load();
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-play mr-2"></i> Hear It!';
+      status.textContent = '❌ Network error: ' + err.message;
+      toast('Network error', '❌');
+    });
+  };
+
+  // ── Init ──────────────────────────────────────────────────
+  renderVoices();
+  renderPresets();
+  renderEmotions();
+
+  // Auto-play a welcome phrase on load after short delay
+  setTimeout(function() {
+    if (!document.getElementById('customText').value) {
+      document.getElementById('customText').value = PRESETS[0].text;
+    }
+  }, 500);
+})();
 </script>
 </body>
 </html>`;

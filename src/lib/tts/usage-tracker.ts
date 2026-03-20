@@ -19,8 +19,8 @@ import type { UsageRecord, VoiceTier, TTSProvider } from './types';
 export const LIMITS = {
   FREE_OPENAI_DAILY:       50,    // OpenAI TTS calls per day (free tier)
   FREE_POLLY_DAILY:       200,    // Polly calls per day (fallback tier)
-  TRIAL_ELEVENLABS_TOTAL:  15,    // Lifetime ElevenLabs uses (trial)
-  TRIAL_ELEVENLABS_DAILY:   5,    // Daily cap within trial period
+  TRIAL_ELEVENLABS_TOTAL:  30,    // Lifetime ElevenLabs uses (trial) — enough to evaluate
+  TRIAL_ELEVENLABS_DAILY:  10,    // Daily cap within trial period
   PREMIUM_DAILY_CAP:      500,    // Soft cap to prevent abuse
   COST_BUDGET_DAILY:        1.0,  // $1/day max generation budget per account
 } as const;
