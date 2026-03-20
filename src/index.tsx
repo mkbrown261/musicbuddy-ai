@@ -315,6 +315,9 @@ function getMainHTML(): string {
     .tab-btn.active { background: linear-gradient(135deg, #ff6b9d, #c44dbb); box-shadow: 0 4px 15px rgba(255,107,157,0.4); }
     .tab-btn:not(.active) { background: rgba(255,255,255,0.07); }
     .tab-btn:not(.active):hover { background: rgba(255,255,255,0.12); }
+    /* Tab content: hidden by default via CSS so DOM nesting doesn't matter */
+    .tab-content { display: none !important; }
+    .tab-content.active-tab { display: block !important; }
 
     /* ── Profile card ── */
     .profile-card { cursor: pointer; transition: all 0.2s; }
@@ -889,7 +892,7 @@ function getMainHTML(): string {
   </div>
 
   <!-- ══════════════════ TAB: COMPANION ══════════════════════ -->
-  <div id="tab-content-companion" class="tab-content px-4 py-4">
+  <div id="tab-content-companion" class="tab-content active-tab px-4 py-4">
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
       <!-- ── Left: Camera Feed + Engagement ── -->
@@ -4093,11 +4096,11 @@ function showToast(msg, icon='✨', type='info') {
 
 // ── Tab switching ─────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active-tab'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   const content = document.getElementById('tab-content-' + tab);
   const btn     = document.getElementById('tab-' + tab);
-  if (content) content.classList.remove('hidden');
+  if (content) content.classList.add('active-tab');
   if (btn)     btn.classList.add('active');
   if (tab === 'profiles')  loadProfiles();
   if (tab === 'dashboard') populateDashboardSelect();
@@ -8324,12 +8327,19 @@ var LESSONS = (function() {
 
   function load() {
     var child = STATE.selectedChild;
-    if (!child) { renderEmpty('Select a child profile to see lessons'); return; }
-    state.childId = child.id;
     var badge = document.getElementById('lessonsChildBadge');
-    if (badge) badge.textContent = child.name + ' (age ' + child.age + ')';
-    api('GET', '/lessons?age='+child.age+'&child_id='+child.id).then(function(r){
+    // Always fetch lessons — use child filters if a child is selected
+    var url = '/lessons';
+    if (child) {
+      state.childId = child.id;
+      url = '/lessons?age='+child.age+'&child_id='+child.id;
+      if (badge) badge.textContent = child.name + ' (age ' + child.age + ')';
+    } else {
+      if (badge) badge.textContent = 'All lessons (no child selected)';
+    }
+    api('GET', url).then(function(r){
       if (r.success) { state.list = r.data.lessons||[]; applyFilter(); }
+      else { renderEmpty('Could not load lessons — try logging in'); }
     });
   }
 
@@ -8472,13 +8482,26 @@ var LESSONS = (function() {
 var BILLING_V2 = (function() {
   var data={credits:0,tier:'free',trial:0,packs:[],transactions:[]};
 
-  function init(){ refreshCredits(); loadAnalytics(); }
+  function init(){
+    // Always load plans/packs from public status endpoint first (no auth needed)
+    api('GET','/billing/status').then(function(r){
+      if(r.success){
+        data.packs = r.data.credit_packs||[];
+        // Set tier from user_tier if available
+        if(r.data.user_tier) data.tier = r.data.user_tier;
+        if(r.data.user_credits!=null) data.credits = r.data.user_credits;
+      }
+      renderPlans(); renderPacks();
+    });
+    refreshCredits();
+    loadAnalytics();
+  }
 
   function refreshCredits(){
     api('GET','/billing/credits').then(function(r){
-      if(!r.success) return;
-      data.credits=r.data.credits; data.tier=r.data.subscription_tier;
-      data.trial=r.data.trial_uses_remaining; data.packs=r.data.credit_packs||[];
+      if(!r.success){ renderPlans(); renderPacks(); return; }  // still render plans even if unauthed
+      data.credits=r.data.credits; data.tier=r.data.subscription_tier||'free';
+      data.trial=r.data.trial_uses_remaining||0; data.packs=r.data.credit_packs||[];
       data.transactions=r.data.recent_transactions||[];
       renderAll();
       var el=document.getElementById('creditsDisplay');
@@ -8516,8 +8539,14 @@ var BILLING_V2 = (function() {
   }
 
   function renderPacks(){
-    var el=document.getElementById('billingPackCards'); if(!el||!data.packs.length) return;
-    el.innerHTML=data.packs.map(function(p){
+    var el=document.getElementById('billingPackCards'); if(!el) return;
+    // Fallback packs if API hasn't loaded yet
+    var packs = data.packs.length ? data.packs : [
+      {id:'pack_10',credits:10,price_label:'$2.99'},
+      {id:'pack_25',credits:25,price_label:'$4.99'},
+      {id:'pack_60',credits:60,price_label:'$9.99'}
+    ];
+    el.innerHTML=packs.map(function(p){
       return '<div class="glass p-4 text-center"><div class="text-2xl font-black text-purple-300">'+p.credits+'</div>'
         +'<div class="text-xs text-gray-400 mb-1">credits</div>'
         +'<div class="font-black text-pink-400 mb-3">'+p.price_label+'</div>'
