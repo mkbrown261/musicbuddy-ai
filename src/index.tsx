@@ -5554,7 +5554,7 @@ const VOICE_INPUT = {
     // Track whether we already called a callback (prevent double-fire)
     let _settled = false;
 
-    const micIcon = document.getElementById('mgMicStatus') || document.getElementById('carMicStatus');
+    const micIcon = document.getElementById('lessonMicStatus') || document.getElementById('mgMicStatus') || document.getElementById('carMicStatus');
     if (micIcon) micIcon.textContent = '🎤 Listening...';
 
     r.onresult = (event) => {
@@ -5563,7 +5563,7 @@ const VOICE_INPUT = {
       VOICE_INPUT._listening = false;
       const expected = expectedPhrase.toLowerCase();
       // Fuzzy match: check if any key word present
-      const words = expected.split(/\\s+/);
+      const words = expected.split(/\s+/);
       const matched = words.some(w => w.length > 2 && transcript.includes(w));
       if (matched || transcript.includes(expected)) {
         _settled = true;
@@ -8813,8 +8813,11 @@ var LESSONS = (function() {
     }
     if (micStatus) micStatus.textContent = '🎤 Listening — say your answer!';
 
-    // Combine all answer option strings — listenFor will fuzzy-match any of them
-    var expectedPhrase = (options || []).join(' ');
+    // Combine all answer option strings — strip punctuation so fuzzy matching works
+    // e.g. ["Woof!", "Meow!"] → "Woof Meow" (avoids "oof" vs "woof!" mismatch)
+    var expectedPhrase = (options || [])
+      .map(function(o) { return o.replace(/[^a-zA-Z0-9\s]/g, '').trim(); })
+      .join(' ');
 
     VOICE_INPUT.listenFor(
       expectedPhrase,
@@ -8829,23 +8832,25 @@ var LESSONS = (function() {
 
         // Match heard text to the closest answer option
         var matched = null;
-        var lHeard  = heard.toLowerCase();
-        // 1) exact
+        var lHeard  = heard.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+        // 1) exact (stripped)
         (options || []).forEach(function(opt) {
-          if (opt.toLowerCase() === lHeard) matched = opt;
+          var lOpt = opt.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+          if (lOpt === lHeard) matched = opt;
         });
-        // 2) substring
+        // 2) substring (stripped)
         if (!matched) {
           (options || []).forEach(function(opt) {
-            var lOpt = opt.toLowerCase();
+            var lOpt = opt.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
             if (!matched && (lHeard.includes(lOpt) || lOpt.includes(lHeard))) matched = opt;
           });
         }
-        // 3) word-level fuzzy
+        // 3) word-level fuzzy (stripped)
         if (!matched) {
           var bestScore = 0;
           (options || []).forEach(function(opt) {
-            var words = opt.toLowerCase().split(/\s+/);
+            var lOpt = opt.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+            var words = lOpt.split(/\s+/);
             var score = words.filter(function(w) {
               return w.length > 1 && lHeard.includes(w);
             }).length;
@@ -8897,7 +8902,7 @@ var LESSONS = (function() {
 
     api('POST', '/lessons/answer', {
       progress_id: state.progress,
-      lesson_id:   state.lesson.id,
+      lesson_id:   state.lesson.id || state.lesson.lesson_id,
       child_id:    state.childId,
       step_index:  state.stepIdx,
       answer:      ans,
@@ -8906,6 +8911,15 @@ var LESSONS = (function() {
         SYSTEM.log('error','LESSONS.answer','API error: '+(r.error||'unknown'));
         state._answering = false;
         document.querySelectorAll('.answer-btn').forEach(function(b){ b.disabled = false; });
+        // Restore voice row so child can retry by voice too
+        var vRowErr = document.getElementById('lessonVoiceRow');
+        if (vRowErr && VOICE_INPUT.isSupported()) {
+          vRowErr.classList.remove('hidden');
+          var msErr = document.getElementById('lessonMicStatus');
+          if (msErr) msErr.textContent = '🔄 Try again — tap or say your answer!';
+          var mbErr = document.getElementById('lessonMicBtn');
+          if (mbErr) { mbErr.disabled = false; mbErr.innerHTML = '<span class="text-xl">🎤</span><span>Try again!</span>'; }
+        }
         showToast('Could not submit answer — try again','⚠️','warning');
         return;
       }
