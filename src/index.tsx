@@ -2049,91 +2049,6 @@ function getMainHTML(): string {
     </div>
   </div>
 
-</div><!-- end main app -->
-
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- MODALS -->
-<!-- ══════════════════════════════════════════════════════════ -->
-
-<!-- Add Profile Modal -->
-<div id="addProfileModal" class="modal-overlay hidden">
-  <div class="modal-box glass bounce-in">
-    <div class="p-6">
-      <div class="flex items-center justify-between mb-5">
-        <h2 class="text-xl font-black flex items-center gap-2">
-          <i class="fas fa-child text-pink-400"></i> New Child Profile
-        </h2>
-        <button onclick="closeModal('addProfileModal')" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
-      </div>
-      
-      <div class="space-y-4">
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs text-gray-400 font-bold block mb-1">Child's Name *</label>
-            <input type="text" id="newName" placeholder="Emma" class="text-sm" />
-          </div>
-          <div>
-            <label class="text-xs text-gray-400 font-bold block mb-1">Age *</label>
-            <input type="number" id="newAge" min="0" max="12" placeholder="4" class="text-sm" />
-          </div>
-        </div>
-
-        <div>
-          <label class="text-xs text-gray-400 font-bold block mb-1">Avatar</label>
-          <div class="flex gap-2 flex-wrap">
-            <button type="button" onclick="selectAvatar('bunny',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="bunny">🐰</button>
-            <button type="button" onclick="selectAvatar('lion',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="lion">🦁</button>
-            <button type="button" onclick="selectAvatar('star',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="star">⭐</button>
-            <button type="button" onclick="selectAvatar('bear',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="bear">🐻</button>
-            <button type="button" onclick="selectAvatar('fox',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="fox">🦊</button>
-            <button type="button" onclick="selectAvatar('penguin',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="penguin">🐧</button>
-          </div>
-          <input type="hidden" id="newAvatar" value="bunny" />
-        </div>
-
-        <div>
-          <label class="text-xs text-gray-400 font-bold block mb-1">Preferred Musical Style</label>
-          <select id="newStyle" class="text-sm">
-            <option value="playful">🎈 Playful</option>
-            <option value="upbeat">⚡ Upbeat</option>
-            <option value="lullaby">🌙 Lullaby</option>
-            <option value="classical">🎻 Classical</option>
-            <option value="energetic">🔥 Energetic</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="text-xs text-gray-400 font-bold block mb-1">Screen Time Limit (minutes/session)</label>
-          <input type="number" id="newScreenTime" min="5" max="120" value="30" class="text-sm" />
-        </div>
-
-        <div>
-          <label class="text-xs text-gray-400 font-bold block mb-2">Favorite Songs (add up to 5)</label>
-          <div id="favSongsList" class="space-y-2 mb-2">
-            <div class="flex gap-2">
-              <input type="text" class="fav-song-input text-sm flex-1" placeholder="Song title (e.g. Baby Shark)" />
-              <input type="text" class="fav-artist-input text-sm w-28" placeholder="Artist" />
-            </div>
-          </div>
-          <button type="button" onclick="addSongRow()" class="btn-secondary text-xs">
-            <i class="fas fa-plus mr-1"></i> Add Song
-          </button>
-        </div>
-      </div>
-
-      <div class="flex gap-3 mt-6">
-        <button onclick="closeModal('addProfileModal')" class="btn-secondary flex-1">Cancel</button>
-        <button onclick="createProfile()" class="btn-primary flex-1">
-          <i class="fas fa-check mr-1"></i> Create Profile
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Audio element for playing snippets -->
-<audio id="audioPlayer" style="display:none" onended="onAudioEnded()"></audio>
-
 <!-- ══════════════════ TAB: LESSONS ══════════════════════════ -->
 <div id="tab-content-lessons" class="tab-content px-4 py-4 hidden">
   <div class="max-w-3xl mx-auto">
@@ -2294,6 +2209,91 @@ function getMainHTML(): string {
     </div>
   </div>
 </div>
+
+</div><!-- end main app -->
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- MODALS -->
+<!-- ══════════════════════════════════════════════════════════ -->
+
+<!-- Add Profile Modal -->
+<div id="addProfileModal" class="modal-overlay hidden">
+  <div class="modal-box glass bounce-in">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-xl font-black flex items-center gap-2">
+          <i class="fas fa-child text-pink-400"></i> New Child Profile
+        </h2>
+        <button onclick="closeModal('addProfileModal')" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Child's Name *</label>
+            <input type="text" id="newName" placeholder="Emma" class="text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-bold block mb-1">Age *</label>
+            <input type="number" id="newAge" min="0" max="12" placeholder="4" class="text-sm" />
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Avatar</label>
+          <div class="flex gap-2 flex-wrap">
+            <button type="button" onclick="selectAvatar('bunny',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="bunny">🐰</button>
+            <button type="button" onclick="selectAvatar('lion',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="lion">🦁</button>
+            <button type="button" onclick="selectAvatar('star',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="star">⭐</button>
+            <button type="button" onclick="selectAvatar('bear',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="bear">🐻</button>
+            <button type="button" onclick="selectAvatar('fox',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="fox">🦊</button>
+            <button type="button" onclick="selectAvatar('penguin',this)" class="avatar-opt glass-light p-2 rounded-xl text-xl cursor-pointer hover:scale-110 transition" data-val="penguin">🐧</button>
+          </div>
+          <input type="hidden" id="newAvatar" value="bunny" />
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Preferred Musical Style</label>
+          <select id="newStyle" class="text-sm">
+            <option value="playful">🎈 Playful</option>
+            <option value="upbeat">⚡ Upbeat</option>
+            <option value="lullaby">🌙 Lullaby</option>
+            <option value="classical">🎻 Classical</option>
+            <option value="energetic">🔥 Energetic</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-1">Screen Time Limit (minutes/session)</label>
+          <input type="number" id="newScreenTime" min="5" max="120" value="30" class="text-sm" />
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-400 font-bold block mb-2">Favorite Songs (add up to 5)</label>
+          <div id="favSongsList" class="space-y-2 mb-2">
+            <div class="flex gap-2">
+              <input type="text" class="fav-song-input text-sm flex-1" placeholder="Song title (e.g. Baby Shark)" />
+              <input type="text" class="fav-artist-input text-sm w-28" placeholder="Artist" />
+            </div>
+          </div>
+          <button type="button" onclick="addSongRow()" class="btn-secondary text-xs">
+            <i class="fas fa-plus mr-1"></i> Add Song
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-3 mt-6">
+        <button onclick="closeModal('addProfileModal')" class="btn-secondary flex-1">Cancel</button>
+        <button onclick="createProfile()" class="btn-primary flex-1">
+          <i class="fas fa-check mr-1"></i> Create Profile
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Audio element for playing snippets -->
+<audio id="audioPlayer" style="display:none" onended="onAudioEnded()"></audio>
 
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- JAVASCRIPT - Full App Logic -->
