@@ -1,188 +1,121 @@
-# 🎵 MusicBuddy AI — Children's Interactive Music Companion
-
-An AI-powered, 5-layer adaptive music companion for children ages 0–12, deployed on Cloudflare Pages.
+# MusicBuddy AI — Full AI Child Platform
 
 ## 🌐 Live URLs
-- **Production App**: https://musicbuddy-ai.pages.dev
-- **API Health**: https://musicbuddy-ai.pages.dev/api/health
-- **GitHub**: https://github.com/mkbrown261/musicbuddy-ai
+- **Production**: https://musicbuddy-ai.pages.dev
+- **Demo (no login)**: https://musicbuddy-ai.pages.dev/demo
 
----
+## 🎯 Platform Overview
+A fully modular AI-powered child interaction, learning, and entertainment platform with:
+- **Intent Layer architecture** (all logic flows through `IntentRouter`)
+- **Tiered TTS** (OpenAI default → ElevenLabs premium → Amazon Polly fallback)
+- **Groq behavior engine** (age-adaptive, personality-aware, emotion-driven)
+- **Credit-based monetization** with Stripe subscriptions + one-time packs
+- **Learning system** with 7 seed lessons + AI lesson generator
+- **Analytics** with per-child tracking and parent dashboard
+- **Canvas animation system** (confetti, celebration, encouragement)
+- **Per-child voice preferences** (ElevenLabs 20 voices + OpenAI 6 voices)
 
-## ✅ Completed Features
+## 💳 Monetization Tiers
+| Tier | Price | Credits | Features |
+|------|-------|---------|----------|
+| Free | $0 | 3 lifetime + 5 trials | Games, basic TTS |
+| Starter | $4.99/mo | 15/month | Lessons, AI songs |
+| Premium | $9.99/mo | 30/month | Lesson generator, priority TTS |
 
-### Layer 1 – UI
-- Child profile manager (create/edit/delete, avatar, age, music style, screen-time limit)
-- Live Companion tab: animated waveform, simulated camera feed with gaze dot & emotion overlays
-- Engagement cue buttons (Smile, Laughter, Fixation, Lost Focus)
-- Gaze simulation area (click/move to simulate eye tracking)
-- AI Chat Bubble with Web Speech API TTS (real voice, free, built into browsers)
-- Music Player with progress bar, play/repeat/skip controls
-- Auto/Manual/BG Listening modes
-- Parental Dashboard: Chart.js engagement doughnut, SVG screen-time ring, recommendations
-- Music Library: per-child snippet history with play buttons
-- Settings: Suno / Replicate / OpenAI API key entry with validation, wrangler secret instructions
+### Credit Packs
+- 10 credits — $2.99
+- 25 credits — $4.99
+- 60 credits — $9.99
 
-### Layer 2 – API (17 endpoints)
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | System health check |
-| GET | `/api/profiles` | List all child profiles |
-| POST | `/api/profiles` | Create profile + seed favorite songs |
-| GET | `/api/profiles/:id` | Get profile with songs + adaptive data |
-| PUT | `/api/profiles/:id` | Update profile |
-| DELETE | `/api/profiles/:id` | Delete profile (cascades) |
-| POST | `/api/profiles/:id/songs` | Add favorite song |
-| POST | `/api/sessions/start` | Start session (closes stale sessions) |
-| POST | `/api/sessions/:id/stop` | Stop session + update adaptive profile |
-| POST | `/api/music/generate` | Generate music (Suno→Replicate→demo) |
-| POST | `/api/music/tts` | Text-to-speech (OpenAI→Web Speech) |
-| POST | `/api/music/interaction` | Full talk+sing cycle |
-| POST | `/api/music/rate` | Rate snippet (updates adaptive learning) |
-| GET | `/api/music/snippets/:childId` | Snippet history + top 5 |
-| POST | `/api/music/keys/validate` | Validate API keys + report active provider |
-| POST | `/api/engagement/event` | Log smile/laughter/fixation/attention_loss |
-| POST | `/api/engagement/decide` | FSM engagement decision (stateless edge) |
-| GET | `/api/engagement/summary/:childId` | Engagement metrics |
-| POST | `/api/engagement/background-detect` | Log detected background song |
-| GET | `/api/dashboard/:childId` | Full parental dashboard stats |
-| POST | `/api/dashboard/:childId/rules` | Update parental rules |
-| GET | `/api/dashboard/:childId/report` | Weekly engagement report |
+## 🗄️ Database Tables (D1 SQLite)
+- `auth_users` — users with `credits`, `subscription_tier`, `stripe_customer_id`
+- `transactions` — full credit ledger (purchases, deductions, bonuses)
+- `credit_usage_log` — per-action credit audit trail
+- `lessons` — lesson catalogue (7 seeded, AI-generatable)
+- `lesson_progress` — per-child lesson progress with score
+- `analytics_events` — event tracking (lesson_started, correct_answer, etc.)
+- `stripe_webhook_log` — idempotent webhook processing
+- `subscriptions` — Stripe subscription state
+- `tts_voice_preferences` — per-child voice settings with `child_id`
+- `child_memory`, `groq_behavior_log`, `engagement_state`, etc.
 
-### Layer 3 – Logic Engine (`src/lib/engine.ts`)
-- **Engagement FSM**: talk→sing→talk cycles based on fixation + positive emotion cues
-- **40+ conversation templates**: greetings, after-song, joy-response, re-engage, transition
-- **Music prompt builder**: `buildMusicPrompt()` creates rich Suno/MusicGen prompts from seed songs, adaptive style, tempo, mood, child age
-- **Adaptive learning**: `computeAdaptiveUpdate()` weighted RL that reinforces/diminishes styles and tempos
-- **Deduplication**: `generatePromptHash()` + `varyPrompt()` ensures no two identical snippets
-- **Auto-cycle guard**: prevents rapid looping (5s cooldown after song ends)
+## ⚙️ API Endpoints
 
-### Layer 4 – Database (Cloudflare D1 SQLite)
-**9 tables** with 37-column schema:
-- `child_profiles` — name, age, avatar, style, screen_time_limit
-- `favorite_songs` — songs with bpm, mood, priority, play_count
-- `music_snippets` — generated audio cache with engagement_score, generation_hash
-- `sessions` — start/end times, duration tracking
-- `engagement_events` — smile/laughter/fixation/attention events with gaze coords
-- `interaction_log` — full TTS + song interaction history
-- `parental_rules` — screen_time, volume_limit, content_filter rules
-- `background_detections` — detected background songs with confidence
-- `adaptive_profiles` — JSON weighted style/tempo scores, avg engagement
+### Spec-compliant shortcuts
+- `POST /create-checkout-session` → Stripe Checkout
+- `POST /webhook/stripe` → Webhook handler (HMAC-SHA256 verified)
+- `GET /credits` → User credits + subscription
+- `POST /use-credit` → Deduct credits (atomic)
+- `GET /lessons` → Available lessons
+- `POST /start-lesson` → Start lesson, returns progress_id
+- `POST /submit-answer` → Evaluate answer, trigger animation
+- `GET /analytics` → Parent analytics dashboard
 
-**Seeded demo data**: Emma (4), Liam (6), Mia (3) with songs, rules, and adaptive profiles.
+### Full API
+- `GET /api/billing/credits` — credits, tier, recent transactions
+- `POST /api/billing/checkout` — Stripe Checkout session
+- `GET /api/billing/subscription` — subscription status
+- `GET /api/lessons` — lesson catalogue (filtered by age, topic)
+- `GET /api/lessons/:id` — full lesson with steps
+- `POST /api/lessons/start` — start lesson
+- `POST /api/lessons/answer` — submit answer + EvaluateAnswer
+- `POST /api/lessons/generate` — AI lesson generator (Groq, Starter+)
+- `POST /api/analytics/track` — TrackEvent intent
+- `GET /api/analytics` — parent analytics (30-day default)
+- `GET /api/analytics/children` — per-child summary
+- `POST /api/demo/tts` — demo TTS (Replicate always, no auth)
 
-### Layer 5 – Hosting (Cloudflare Pages + Workers)
-- Hono v4 framework on Cloudflare Workers edge runtime
-- D1 production database: `webapp-production` (ID: f15556d9-8cbf-4593-a552-465c1cc5e2f3)
-- PM2 ecosystem for sandbox development
-- CORS + logger middleware
-- Security headers
-
----
-
-## 🔌 API Integration Status
-
-| Service | Status | Setup |
-|---------|--------|-------|
-| **Web Speech API (TTS)** | ✅ Active (free) | Built into browsers — zero config |
-| **Demo Audio Pool** | ✅ Active (free) | 7 royalty-free Pixabay tracks |
-| **Replicate/MusicGen** | 🔑 Needs key | `npx wrangler secret put REPLICATE_API_KEY` |
-| **OpenAI TTS** | 🔑 Needs key | `npx wrangler secret put OPENAI_API_KEY` |
-| **Suno AI** | 🚫 Private API | Not publicly open; requires enterprise access |
-| **Vision/Camera** | 🔲 Simulated | Manual gaze simulation; real needs MediaPipe |
-| **Audio Detection** | 🔲 Manual entry | Background song entered manually |
-
----
-
-## ⚡ To Enable Real AI Music Generation
-
-### Option A — Replicate API (Meta MusicGen, **RECOMMENDED**)
-```bash
-# ~$0.004 per 25-second generation
-npx wrangler secret put REPLICATE_API_KEY
-# (enter your r8_... token from https://replicate.com/account/api-tokens)
-
-npm run build && npx wrangler pages deploy dist --project-name musicbuddy-ai
+## 🔁 Intent Layer Flow
+```
+User Action → Intent Layer
+→ Check credits / subscription (GetUserCredits / CheckCreditBalance)
+→ Groq Behavior Engine (GenerateAdaptiveBehavior)
+→ Apply age + personality + emotion (ApplyPersonality, UpdateEmotionState)
+→ Generate response
+→ ResolveTTSProvider → RequestTTS → CacheAudio
+→ Play output
+→ TrackEvent → TriggerAnimation
+→ DeductCredits (if applicable)
 ```
 
-### Option B — OpenAI TTS (Real Child-Friendly Voice)
-```bash
-# ~$0.015 per 1K characters (very cheap for short phrases)
-npx wrangler secret put OPENAI_API_KEY
-# (enter your sk-... key from https://platform.openai.com/api-keys)
+## 🎓 Learning System
+- **7 seed lessons**: Animals, Numbers, Colors, Letters, Shapes, Music, Advanced Math
+- **Tier access**: Free (Animals, Numbers, Colors), Starter (Letters, Shapes, Music), Premium (Advanced Math)
+- **AI Generator**: POST `/api/lessons/generate` — Groq creates lessons from topic + difficulty + age
+- **Step types**: `intro` → `question` (multiple choice) → `reward`
+- **Animations**: correct→confetti, complete→full_celebration, wrong→soft_encouragement
 
-npm run build && npx wrangler pages deploy dist --project-name musicbuddy-ai
-```
-
----
-
-## 🧪 System Test
-
-Run the full end-to-end test suite (92 tests):
-```bash
-python3 test_system.py
-# or against a specific URL:
-python3 test_system.py https://musicbuddy-ai.pages.dev
-```
-
-**Test Score: 100% (92/92)** ✅
-
----
-
-## 🛠️ Local Development
-
-```bash
-npm install
-npm run build
-npx wrangler d1 migrations apply webapp-production --local
-npx wrangler d1 execute webapp-production --local --file=./seed.sql
-pm2 start ecosystem.config.cjs
-# App at http://localhost:3000
-```
-
----
-
-## 📁 Project Structure
-
-```
-webapp/
-├── src/
-│   ├── index.tsx          # Main Hono app + entire SPA UI (single file)
-│   ├── types.ts           # TypeScript types for all 5 layers
-│   ├── lib/
-│   │   ├── db.ts          # D1 database helper class
-│   │   └── engine.ts      # Engagement FSM + music prompt builder + adaptive RL
-│   └── routes/
-│       ├── profiles.ts    # Child profile CRUD
-│       ├── sessions.ts    # Session management
-│       ├── engagement.ts  # Engagement events + FSM decide
-│       ├── music.ts       # Music generation (Suno/Replicate/TTS/demo)
-│       └── dashboard.ts   # Parental dashboard + reports
-├── migrations/
-│   └── 0001_initial_schema.sql
-├── seed.sql               # Demo data (Emma, Liam, Mia)
-├── test_system.py         # 92-test end-to-end test suite
-├── ecosystem.config.cjs   # PM2 config for sandbox
-├── wrangler.jsonc         # Cloudflare Pages + D1 config
-└── package.json
-```
-
----
-
-## 🔐 Privacy & Safety
-
-- No camera or microphone requested by default (all opt-in via Settings)
-- Vision/gaze simulation is manual — no automatic face detection
-- All child data stored in Cloudflare D1 (edge-distributed, GDPR-compliant)
-- Parental controls: screen-time limits, volume caps, content filtering
-- Adaptive learning operates locally on engagement logs — no external ML calls
-
----
+## 🔒 Security
+- All API keys backend-only (Cloudflare Worker secrets)
+- Stripe webhook verified via HMAC-SHA256
+- No client-side credit logic
+- Atomic DB credit deductions (UPDATE … WHERE credits >= amount)
+- Idempotent webhook processing via `stripe_webhook_log`
 
 ## 🚀 Deployment
+- **Platform**: Cloudflare Pages + D1 SQLite
+- **Status**: ✅ Active
+- **Stack**: Hono + TypeScript + TailwindCSS CDN + Groq + ElevenLabs/Replicate/OpenAI/Polly TTS
+- **Version**: 3.0.0-full-platform
 
-- **Platform**: Cloudflare Pages (edge, global CDN)
-- **Status**: ✅ Live
-- **Tech Stack**: Hono 4 + TypeScript + Tailwind CSS CDN + Chart.js + Web Speech API
-- **Database**: Cloudflare D1 (SQLite at edge)
-- **Last Updated**: 2026-03-19
+## 🔑 Required Secrets (Cloudflare Pages)
+```
+STRIPE_SECRET_KEY          — Stripe secret key
+STRIPE_PUBLISHABLE_KEY     — Stripe publishable key  
+STRIPE_WEBHOOK_SECRET      — Stripe webhook signing secret
+OPENAI_API_KEY             — OpenAI TTS
+ELEVENLABS_API_KEY         — ElevenLabs premium TTS
+REPLICATE_API_KEY          — Replicate (ElevenLabs via API)
+GROQ_API_KEY               — Groq behavior engine
+AWS_ACCESS_KEY_ID          — Amazon Polly fallback
+AWS_SECRET_ACCESS_KEY      — Amazon Polly fallback
+AWS_REGION                 — Amazon Polly fallback
+```
+
+## 📊 To Do / Next Steps
+- Add real Stripe Price IDs to `window._stripePrices` config
+- Configure Stripe webhook endpoint in Stripe dashboard: `POST /webhook/stripe`
+- Set all secrets via `npx wrangler pages secret put KEY_NAME --project-name musicbuddy-ai`
+- Add parent analytics chart (Chart.js daily activity graph in billing tab)
+- Add voice-based answer submission in lessons
+- Add lesson completion certificate/reward screen
