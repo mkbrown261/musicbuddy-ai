@@ -611,9 +611,9 @@ function getMainHTML(): string {
             <div class="relative">
               <input type="password" id="loginPassword" placeholder="Your password"
                 onkeydown="if(event.key==='Enter') doLogin()" />
-              <button onclick="togglePwd('loginPassword')"
+              <button onclick="togglePwd('loginPassword','loginPwdIcon')"
                 class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
-                <i class="fas fa-eye text-sm"></i>
+                <i class="fas fa-eye text-sm" id="loginPwdIcon"></i>
               </button>
             </div>
           </div>
@@ -649,9 +649,9 @@ function getMainHTML(): string {
             <div class="relative">
               <input type="password" id="regPassword" placeholder="Choose a strong password"
                 onkeydown="if(event.key==='Enter') doRegister()" />
-              <button onclick="togglePwd('regPassword')"
+              <button onclick="togglePwd('regPassword','regPwdIcon')"
                 class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
-                <i class="fas fa-eye text-sm"></i>
+                <i class="fas fa-eye text-sm" id="regPwdIcon"></i>
               </button>
             </div>
           </div>
@@ -2702,8 +2702,8 @@ const EXPRESSOR = {
       .replace(/\bWoohoo\b/gi, 'Wooo hoooo')
       .replace(/\bWow\b/gi, 'Wooooow')
       .replace(/\bYes\b/gi, 'Oh yes')
-      .replace(/\bAwesome\b/gi, 'That is AWESOME')
-      .replace(/\bGood job\b/gi, 'Yaaayyy — good job!')
+      .replace(/\bAwesome\b/gi, 'AWESOME')
+      .replace(/\bGood job\b/gi, 'Great job!')
       // Pacing: add pauses with commas where natural
       .replace(/\.\s+/g, '... ')
       .replace(/!\s+/g, '! ')
@@ -2758,7 +2758,7 @@ const EXPRESSOR = {
       const pair = templates[i % templates.length];
       lines.push(pair[0], pair[1]);
     }
-    return lines.slice(0, numLines).join('\\n');
+    return lines.slice(0, numLines).join('\n');
   },
 
   // Build timed lyric phrases for beat-synced delivery
@@ -2766,7 +2766,7 @@ const EXPRESSOR = {
     const bpm = parseInt(bpmValue) || 100;
     const beatDuration = 60 / bpm; // seconds per beat
     const phraseDuration = beatDuration * 4; // 4 beats per phrase
-    const lines = lyrics.split('\\n').map(l => l.trim()).filter(Boolean);
+    const lines = lyrics.split(/\n|\\n/).map(l => l.trim()).filter(Boolean);
 
     return lines.map((line, i) => ({
       text: line,
@@ -3687,7 +3687,6 @@ const PERFORMER = {
       // Capitalize emphasis words
       .replace(/\bsupER\b/gi, 'SUPER')
       .replace(/\bso fun\b/gi, 'SO fun')
-      .replace(/\bmore\b/g, 'MORE')
       // Energy-matched suffix
       .trim();
 
@@ -4486,9 +4485,16 @@ function updateChildUI() {
 async function startSession() {
   if (!STATE.selectedChild) { showToast('Select a child profile first!', '⚠️', 'warning'); return; }
   if (STATE.sessionActive) return;
+  // Prevent double-click during async API call
+  const startBtn = document.getElementById('startBtn');
+  if (startBtn) { startBtn.disabled = true; }
 
   const r = await api('POST', '/sessions/start', { child_id: STATE.selectedChild.id, mode: STATE.mode });
-  if (!r.success) { showToast('Error starting session: ' + r.error, '❌', 'error'); return; }
+  if (!r.success) {
+    if (startBtn) startBtn.disabled = false;
+    showToast('Error starting session: ' + r.error, '❌', 'error');
+    return;
+  }
 
   STATE.currentSession = r.data.session;
   STATE.sessionActive = true;
@@ -4502,7 +4508,7 @@ async function startSession() {
   const sessInd  = document.getElementById('sessionIndicator');
   const scanLine = document.getElementById('scanLine');
   const vStatus  = document.getElementById('visionStatus');
-  if (startBtn) startBtn.classList.add('hidden');
+  if (startBtn) { startBtn.classList.add('hidden'); startBtn.disabled = false; } // re-enable for next session
   if (stopBtn)  stopBtn.classList.remove('hidden');
   if (sessInd)  sessInd.style.display = 'flex';
   
@@ -4535,6 +4541,7 @@ async function stopSession() {
   if (audio) audio.pause();
   if (STATE._synthStopFn) { STATE._synthStopFn(); STATE._synthStopFn = null; }
   STATE.isPlaying = false;
+  STATE._interactionInProgress = false;  // always reset on stop — prevents stuck buttons
 
   await api('POST', ''+'/sessions/'+STATE.currentSession.id+'/stop').catch(() => {});
   
@@ -4593,8 +4600,10 @@ async function greetChild() {
   await speakText(text);
   
   // Small natural pause, then kick off first song cycle
+  // Use 'post_greeting' trigger so triggerInteraction skips the talk phase
+  // (we already greeted above — going straight to music is the right flow)
   await new Promise(r => setTimeout(r, 600));
-  triggerInteraction('greeting');
+  triggerInteraction('post_greeting');
 }
 
 // ── Auto Cycle ────────────────────────────────────────────────
@@ -4615,6 +4624,9 @@ async function triggerInteraction(trigger = 'manual') {
   if (STATE.isPlaying) { showToast('Already playing...', 'ℹ️'); return; }
   if (STATE._interactionInProgress) return;
   STATE._interactionInProgress = true;
+
+  // Safety watchdog: if interaction gets stuck for >35s, auto-reset the flag
+  const _watchdog = setTimeout(() => { STATE._interactionInProgress = false; }, 35000);
 
   // ── GATE CHECK: songs are FREE for everyone ──────────────────
   // Demo songs play without any key. AI generation (Replicate/Suno)
@@ -4666,7 +4678,8 @@ async function triggerInteraction(trigger = 'manual') {
     // 1. Ask Groq for the next live-host action (cached, <6s timeout)
     // 2. If Groq unavailable, fall back to PERFORMER deterministic lines
     // This drives the "Ms. Rachel" live-host feel.
-    if (STATE.lastInteraction === 'sing' || STATE.lastInteraction === null || trigger === 'greeting') {
+    // NOTE: 'post_greeting' trigger skips talk phase — greeting already spoken by greetChild()
+    if (trigger !== 'post_greeting' && (STATE.lastInteraction === 'sing' || STATE.lastInteraction === null || trigger === 'greeting')) {
       updateStateUI('talk', trigger);
 
       // Try Groq first (non-blocking — falls back instantly if unavailable)
@@ -4785,6 +4798,7 @@ async function triggerInteraction(trigger = 'manual') {
     }
 
   } finally {
+    clearTimeout(_watchdog);
     STATE._interactionInProgress = false;
   }
 }
@@ -5021,6 +5035,8 @@ function playAudio(url, title, style, duration) {
 }
 
 async function onAudioEnded() {
+  // Guard against double-fire (audio element onended + synth timeout can both fire)
+  if (!STATE.isPlaying) return;
   STATE.isPlaying = false;
   clearInterval(STATE.progressTimer);
   document.getElementById('progressFill').style.width = '100%';
@@ -5066,6 +5082,7 @@ function resetPlayer() {
 async function repeatSnippet() {
   if (!STATE.currentSnippet) { showToast('No song to repeat yet', 'ℹ️'); return; }
   if (!STATE.sessionActive) { showToast('Start a session first!', '⚠️', 'warning'); return; }
+  if (STATE.isPlaying) { showToast('Already playing!', 'ℹ️'); return; }
   
   const repeatTexts = [
     \`One more time just for you, \${STATE.selectedChild?.name}!\`,
@@ -5087,7 +5104,12 @@ function skipSnippet() {
   audio.pause();
   if (STATE._synthStopFn) { STATE._synthStopFn(); STATE._synthStopFn = null; }
   STATE.isPlaying = false;
+  STATE._interactionInProgress = false;  // clear any stuck interaction so skip always works
   clearInterval(STATE.progressTimer);
+  // Clear any in-progress sing-along
+  if (typeof _singTimer !== 'undefined' && _singTimer) { clearTimeout(_singTimer); _singTimer = null; }
+  const lyricsEl = document.getElementById('singAlongDisplay');
+  if (lyricsEl) { lyricsEl.style.opacity = '0'; setTimeout(() => lyricsEl.classList.add('hidden'), 300); }
   triggerInteraction('skip');
 }
 
@@ -6470,7 +6492,7 @@ const BILLING = {
     // Show tier details
     const detail = document.getElementById('billingTierDetail');
     document.getElementById('billingTierName').textContent = plan.emoji + ' ' + plan.name + ' Plan';
-    document.getElementById('billingTierFeatures').innerHTML = plan.features.map(function(f){return '<li class="flex items-start gap-1"><span class="text-green-400 mt-0.5">2713</span>'+f+'</li>';}).join('');
+    document.getElementById('billingTierFeatures').innerHTML = plan.features.map(function(f){return '<li class="flex items-start gap-1"><span class="text-green-400 mt-0.5">&#x2713;</span>'+f+'</li>';}).join('');
     document.getElementById('billingTierPrice').textContent = plan.price + ' ' + plan.priceNote;
     detail.classList.remove('hidden');
 
@@ -8315,9 +8337,9 @@ function singLyricsWithSong(songTitle, style, durationSecs) {
     catch(e) { lyrics = _defaultLyrics(style, name); }
   }
 
-  // Split into singable lines
-  var lines = lyrics.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 2; });
-  if (lines.length === 0) lines = _defaultLyrics(style, name).split('\\n');
+  // Split into singable lines — handle both real newlines and literal \n sequences
+  var lines = lyrics.split(/\n|\\n/).map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 2; });
+  if (lines.length === 0) lines = _defaultLyrics(style, name).split('\n');
 
   // Show lyrics display
   var lyricsEl = document.getElementById('singAlongDisplay');
@@ -8362,13 +8384,17 @@ function singLyricsWithSong(songTitle, style, durationSecs) {
 }
 
 function _defaultLyrics(style, name) {
+  // Note: apostrophes in lyrics are safe here because this function is called
+  // from singLyricsWithSong which passes lines to speakText — contractions
+  // make TTS sound more natural. Written without backslash-escaped apostrophes
+  // by using plain ASCII apostrophe (0x27) in double-quoted strings.
   var styles = {
-    playful:   "Hey " + name + ", lets play today!\\nJump and dance and shout hooray!\\nLa la la, come sing with me!\\nWe are happy as can be!",
-    energetic: "Go go go, feel the beat!\\nStamp your feet and feel the heat!\\nYou can do it, " + name + "!\\nMove and groove all day!",
-    calm:      "Close your eyes, " + name + ", and breathe...\\nSoft and slow, just like the leaves.\\nLa la la, sweet and low.\\nGentle music, soft and slow.",
-    lullaby:   "Sleep tight, sweet " + name + ", goodnight.\\nStars are twinkling, shining bright.\\nDream of songs and happy days.\\nDrifting off in gentle haze.",
-    educational: "A B C, come learn with me!\\nNumbers, letters, one two three!\\nWe are so smart, " + name + " and me!\\nLearning is fun as it can be!",
-    adventure: name + ", lets go explore!\\nEvery day there is something more!\\nAdventures wait, lets sing along!\\nWe are brave and happy, we are so strong!",
+    playful:     "Hey " + name + ", let us play today!\nJump and dance and shout hooray!\nLa la la, come sing with me!\nWe are happy as can be!",
+    energetic:   "Go go go, feel the beat!\nStamp your feet and feel the heat!\nYou can do it, " + name + "!\nMove and groove all day!",
+    calm:        "Close your eyes, " + name + ", and breathe.\nSoft and slow, just like the leaves.\nLa la la, sweet and low.\nGentle music, soft and slow.",
+    lullaby:     "Sleep tight, sweet " + name + ", good night.\nStars are twinkling, shining bright.\nDream of songs and happy days.\nDrifting off in gentle haze.",
+    educational: "A B C, come learn with me!\nNumbers, letters, one two three!\nWe are so smart, " + name + " and me!\nLearning is fun as it can be!",
+    adventure:   name + ", let us go explore!\nEvery day there is something more!\nAdventures wait, let us sing along!\nWe are brave and happy, we are so strong!",
   };
   return styles[style] || styles.playful;
 }
