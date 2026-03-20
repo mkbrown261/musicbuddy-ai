@@ -8209,7 +8209,7 @@ async function init() {
   const creditsWrap = document.getElementById('creditsHeaderWrap');
   if (creditsWrap) creditsWrap.classList.remove('hidden');
   // Load credits count
-  api('GET', '/billing/credits').then((cr: any) => {
+  api('GET', '/billing/credits').then((cr) => {
     if (cr.success) {
       const el = document.getElementById('creditsDisplay');
       if (el) el.textContent = cr.data.credits + ' cr';
@@ -8396,7 +8396,7 @@ var LESSONS = (function() {
       if(step.type==='reward'){ANIM.celebration();speakText(step.text,'excited');}
     } else if(step.type==='question'&&step.options){
       if(nextBtn) nextBtn.classList.add('hidden');
-      if(opts) opts.innerHTML=step.options.map(function(o){return '<button class="answer-btn" onclick="LESSONS.answer(\''+o.replace(/'/g,"\\'")+'\')">' + o + '</button>';}).join('');
+      if(opts){opts.innerHTML=step.options.map(function(o){return '<button class="answer-btn">' + o + '</button>';}).join('');opts.querySelectorAll('.answer-btn').forEach(function(b){b.addEventListener('click',function(){LESSONS.answer(b.textContent);});});}
     }
   }
 
@@ -8509,9 +8509,10 @@ var BILLING_V2 = (function() {
         +'<div class="text-right"><div class="text-xs text-gray-400">Credits</div><div class="font-black text-purple-300">'+p.credits+'</div></div></div>'
         +'<ul class="text-xs text-gray-300 space-y-1 mb-4">'+p.features.map(function(f){return '<li><i class="fas fa-check text-green-400 mr-2"></i>'+f+'</li>';}).join('')+'</ul>'
         +(isCurrent?'<div class="text-center text-xs font-bold text-green-400 py-2"><i class="fas fa-check-circle mr-1"></i>Current Plan</div>'
-          :p.id!=='free'?'<button onclick="BILLING_V2.subscribe(\''+p.id+'\')" class="btn-primary w-full text-sm">Get '+p.name+' <i class="fas fa-arrow-right ml-1"></i></button>':'')
+          :p.id!=='free'?'<button data-plan-id="'+p.id+'" class="billing-subscribe-btn btn-primary w-full text-sm">Get '+p.name+' <i class="fas fa-arrow-right ml-1"></i></button>':'')
         +'</div>';
     }).join('');
+    el.querySelectorAll('.billing-subscribe-btn').forEach(function(b){b.addEventListener('click',function(){BILLING_V2.subscribe(b.getAttribute('data-plan-id'));});});
   }
 
   function renderPacks(){
@@ -8520,8 +8521,9 @@ var BILLING_V2 = (function() {
       return '<div class="glass p-4 text-center"><div class="text-2xl font-black text-purple-300">'+p.credits+'</div>'
         +'<div class="text-xs text-gray-400 mb-1">credits</div>'
         +'<div class="font-black text-pink-400 mb-3">'+p.price_label+'</div>'
-        +'<button onclick="BILLING_V2.buyPack(\''+p.id+'\')" class="btn-primary w-full text-xs">Buy Now</button></div>';
+        +'<button data-pack-id="'+p.id+'" class="billing-pack-btn btn-primary w-full text-xs">Buy Now</button></div>';
     }).join('');
+    el.querySelectorAll('.billing-pack-btn').forEach(function(b){b.addEventListener('click',function(){BILLING_V2.buyPack(b.getAttribute('data-pack-id'));});});
   }
 
   function renderTransactions(){

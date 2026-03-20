@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/check-html-js.cjs",
     "preview": "wrangler pages dev",
     "deploy": "npm run build && wrangler pages deploy dist",
     "deploy:prod": "npm run build && wrangler pages deploy dist --project-name webapp",
@@ -17,7 +17,8 @@
     "db:console": "wrangler d1 execute webapp-production --local",
     "start": "pm2 start ecosystem.config.cjs",
     "stop": "pm2 stop musicbuddy",
-    "logs": "pm2 logs musicbuddy --nostream"
+    "logs": "pm2 logs musicbuddy --nostream",
+    "check:js": "node scripts/check-html-js.cjs"
   },
   "dependencies": {
     "hono": "^4.12.8"
