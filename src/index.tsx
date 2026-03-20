@@ -2103,6 +2103,14 @@ function getMainHTML(): string {
         <div class="text-5xl mb-3" id="lessonStepEmoji">📚</div>
         <div class="font-bold text-lg mb-4" id="lessonStepText"></div>
         <div id="lessonAnswerOptions" class="grid grid-cols-2 gap-3 max-w-sm mx-auto"></div>
+        <!-- Voice input row (shown only when speech API is supported) -->
+        <div id="lessonVoiceRow" class="hidden mt-4 flex flex-col items-center gap-2">
+          <button id="lessonMicBtn" onclick="LESSONS.lessonMicTap()"
+            class="minigame-btn px-5 py-2 text-sm flex items-center gap-2">
+            <span class="text-xl">🎤</span><span>Say your answer!</span>
+          </button>
+          <div id="lessonMicStatus" class="text-xs text-gray-400"></div>
+        </div>
         <button id="lessonNextBtn" class="btn-primary mt-4 hidden" onclick="LESSONS.nextStep()">
           <i class="fas fa-arrow-right mr-2"></i> Continue
         </button>
@@ -8673,6 +8681,13 @@ var LESSONS = (function() {
 
   // ── Intent: ResetLessonState ──────────────────────────────
   function _resetLessonState() {
+    // Abort any active lesson voice recognition
+    if (window.VOICE_INPUT && VOICE_INPUT._recognition) {
+      try { VOICE_INPUT._recognition.abort(); } catch(e) {}
+      VOICE_INPUT._listening = false;
+    }
+    var vr = document.getElementById('lessonVoiceRow');
+    if (vr) vr.classList.add('hidden');
     state.lesson = null;
     state.progress = null;
     state.stepIdx = 0;
@@ -8763,7 +8778,103 @@ var LESSONS = (function() {
           });
         });
       }
+      // ── Intent: Voice Input for lessons (same rule as free games) ──
+      var voiceRow = document.getElementById('lessonVoiceRow');
+      if (voiceRow) {
+        if (VOICE_INPUT.isSupported()) {
+          voiceRow.classList.remove('hidden');
+          // Auto-start after TTS settles (800 ms, mirrors Call-and-Response pattern)
+          setTimeout(function() { _listenForAnswer(step.options); }, 800);
+        } else {
+          voiceRow.classList.add('hidden');
+        }
+      }
+    } else {
+      // hide voice row on intro/reward steps
+      var voiceRowHide = document.getElementById('lessonVoiceRow');
+      if (voiceRowHide) voiceRowHide.classList.add('hidden');
     }
+  }
+
+  // ── Intent: Voice Input for Lessons ──────────────────────────────
+  // Mirrors carListenForResponse: listens for any answer option,
+  // fuzzy-matches, then routes to LESSONS.answer() via the Intent Layer.
+  function _listenForAnswer(options) {
+    if (!VOICE_INPUT.isSupported()) return;
+    if (state._answering) return;
+    if (!state.lesson)    return;
+
+    var micBtn    = document.getElementById('lessonMicBtn');
+    var micStatus = document.getElementById('lessonMicStatus');
+
+    if (micBtn) {
+      micBtn.disabled = true;
+      micBtn.innerHTML = '<span class="text-xl">🔴</span><span>Listening…</span>';
+    }
+    if (micStatus) micStatus.textContent = '🎤 Listening — say your answer!';
+
+    // Combine all answer option strings — listenFor will fuzzy-match any of them
+    var expectedPhrase = (options || []).join(' ');
+
+    VOICE_INPUT.listenFor(
+      expectedPhrase,
+      7000,
+      // onSuccess
+      function(heard) {
+        if (micBtn) {
+          micBtn.disabled = false;
+          micBtn.innerHTML = '<span class="text-xl">🎤</span><span>Say your answer!</span>';
+        }
+        if (micStatus) micStatus.textContent = '✅ I heard: ' + heard;
+
+        // Match heard text to the closest answer option
+        var matched = null;
+        var lHeard  = heard.toLowerCase();
+        // 1) exact
+        (options || []).forEach(function(opt) {
+          if (opt.toLowerCase() === lHeard) matched = opt;
+        });
+        // 2) substring
+        if (!matched) {
+          (options || []).forEach(function(opt) {
+            var lOpt = opt.toLowerCase();
+            if (!matched && (lHeard.includes(lOpt) || lOpt.includes(lHeard))) matched = opt;
+          });
+        }
+        // 3) word-level fuzzy
+        if (!matched) {
+          var bestScore = 0;
+          (options || []).forEach(function(opt) {
+            var words = opt.toLowerCase().split(/\s+/);
+            var score = words.filter(function(w) {
+              return w.length > 1 && lHeard.includes(w);
+            }).length;
+            if (score > bestScore) { bestScore = score; matched = opt; }
+          });
+        }
+
+        if (matched) {
+          // Route through Intent Layer — identical to a button tap
+          LESSONS.answer(matched);
+        } else {
+          if (micStatus) micStatus.textContent = '🤔 Try tapping your answer below!';
+          if (micBtn) {
+            micBtn.disabled = false;
+            micBtn.innerHTML = '<span class="text-xl">🎤</span><span>Try again!</span>';
+          }
+        }
+      },
+      // onFail
+      function(reason) {
+        if (micBtn) {
+          micBtn.disabled = false;
+          micBtn.innerHTML = '<span class="text-xl">🎤</span><span>Try again!</span>';
+        }
+        if (micStatus) micStatus.textContent = reason === 'timeout'
+          ? '⏱️ Tap your answer below, or tap 🎤 to try again!'
+          : '🔄 Mic issue — tap your answer or try again!';
+      }
+    );
   }
 
   // ── Intent: SubmitAnswer(childID, answer) ─────────────────
@@ -8771,6 +8882,15 @@ var LESSONS = (function() {
     if (!state.lesson || !ans) return;
     if (state._answering) return;  // prevent double-submit
     state._answering = true;
+
+    // Abort any active voice recognition (answer submitted — stop listening)
+    if (window.VOICE_INPUT && VOICE_INPUT._recognition) {
+      try { VOICE_INPUT._recognition.abort(); } catch(e) {}
+      VOICE_INPUT._listening = false;
+    }
+    // Hide mic row while processing (re-shown by _renderStep on next question)
+    var vRowAns = document.getElementById('lessonVoiceRow');
+    if (vRowAns) vRowAns.classList.add('hidden');
 
     // Disable all buttons immediately (prevent re-tap)
     document.querySelectorAll('.answer-btn').forEach(function(b){ b.disabled = true; });
@@ -8925,7 +9045,7 @@ var LESSONS = (function() {
   }
 
   // ── Public API ────────────────────────────────────────────
-  return { load: load, start: start, answer: answer, nextStep: nextStep, closeLesson: closeLesson, setFilter: setFilter, generate: generate };
+  return { load: load, start: start, answer: answer, nextStep: nextStep, closeLesson: closeLesson, setFilter: setFilter, generate: generate, lessonMicTap: function() { _listenForAnswer((state.lesson && state.lesson.steps && state.lesson.steps[state.stepIdx] && state.lesson.steps[state.stepIdx].options) || []); } };
 })();
 
 // ════════════════════════════════════════════════════════════
