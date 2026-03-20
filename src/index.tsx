@@ -2720,34 +2720,34 @@ const EXPRESSOR = {
     const name = childName || 'friend';
     const styleTemplates = {
       playful: [
-        [\`Hey \${name}, let's play and sing today!\`, 'Clap your hands and shout hooray!'],
+        ['Hey ' + name + ', let\'s play and sing today!', 'Clap your hands and shout hooray!'],
         ['Jump and bounce and spin around,', 'Make the most amazing sound!'],
         ['Wiggle fingers, wiggle toes,', 'Everywhere the music goes!'],
-        [\`You are wonderful, \${name}!\`, 'Music fills the room today!'],
+        ['You are wonderful, ' + name + '!', 'Music fills the room today!'],
       ],
       upbeat: [
         ['Move your body, feel the beat,', 'Stomp stomp stomp your dancing feet!'],
         ['Left and right and up and down,', 'Spin around and touch the ground!'],
         ['Clap your hands, one two three,', 'Singing makes us all feel free!'],
-        [\`Go \${name}, go go go!\`, 'Watch your energy just flow!'],
+        ['Go ' + name + ', go go go!', 'Watch your energy just flow!'],
       ],
       lullaby: [
         ['Close your eyes and drift away,', 'We will sing until the end of day.'],
         ['Soft and gentle, sweet and slow,', 'Watch the sleepy moonbeams glow.'],
         ['Stars are shining, night is near,', 'Mommy and daddy love you dear.'],
-        [\`Dream sweet dreams tonight, \${name},\`, 'Morning music on the way.'],
+        ['Dream sweet dreams tonight, ' + name + ',', 'Morning music on the way.'],
       ],
       energetic: [
         ['JUMP! JUMP! Feel the power!', 'SING! SING! Every single hour!'],
         ['Run and leap and touch the sky,', 'Music makes us want to fly!'],
         ['BOOM! BOOM! Hear that beat!', 'Feel it travel to your feet!'],
-        [\`\${name} is the BEST today!\`, 'Nothing can get in our way!'],
+        [name + ' is the BEST today!', 'Nothing can get in our way!'],
       ],
       classical: [
         ['La la la, so sweetly singing,', 'Hear the melody bells are ringing.'],
         ['Gentle notes float through the air,', 'Music flowing everywhere.'],
         ['One two three, a waltz we play,', 'Dancing gracefully today.'],
-        [\`Beautiful music, \${name},\` , 'Like a song upon the breeze.'],
+        ['Beautiful music, ' + name + ',', 'Like a song upon the breeze.'],
       ],
     };
 
@@ -2795,8 +2795,8 @@ async function autoGenerateLyrics() {
 function setCreatorMode(mode) {
   STATE.creatorMode = mode;
   ['lyrics','prompt','upload'].forEach(m => {
-    document.getElementById(\`creatorPanel\${m.charAt(0).toUpperCase()+m.slice(1)}\`)?.classList.toggle('hidden', m !== mode);
-    document.getElementById(\`cm\${m.charAt(0).toUpperCase()+m.slice(1)}\`)?.classList.toggle('active', m === mode);
+    document.getElementById('creatorPanel' + m.charAt(0).toUpperCase() + m.slice(1))?.classList.toggle('hidden', m !== mode);
+    document.getElementById('cm' + m.charAt(0).toUpperCase() + m.slice(1))?.classList.toggle('active', m === mode);
   });
 }
 
@@ -3699,18 +3699,18 @@ const PERFORMER = {
 
   // Character signature phrases — Music Buddy's personality
   signature: {
-    greetHigh: (n) => \`Yaaayyy! \${n} is HERE! I have been waiting for you! Let us make some MUSIC!\`,
-    greetMed:  (n) => \`Hey hey hey! \${n}! So happy to see you! Ready for some fun?\`,
-    greetLow:  (n) => \`Hello \${n}! I am so glad you are here. Ready for some gentle music?\`,
-    joyHigh:   (n) => \`OH WOW! Look at you \${n}! You are on FIRE today! Let us GOOOOO!\`,
-    joyMed:    (n) => \`Yaaayyy! \${n} you are doing SO great! I love your energy!\`,
-    joyLow:    (n) => \`Beautiful, \${n}. You are doing so well. I am proud of you.\`,
-    transHigh: (n) => \`Ready \${n}? THREE... TWO... ONE... let us GOOOOO!\`,
-    transMed:  (n) => \`Okay \${n}! Get those ears ready... here it comes!\`,
-    transLow:  (n) => \`Ready \${n}? Something special is coming just for you...\`,
-    afterHigh: (n) => \`YAAAYYY! That was INCREDIBLE \${n}! Did you feel that energy?!\`,
-    afterMed:  (n) => \`Woohoo! That was SO fun \${n}! Want to hear another one?\`,
-    afterLow:  (n) => \`That was beautiful, \${n}. Did you like that? Ready for more?\`,
+    greetHigh: (n) => 'Yaaayyy! ' + n + ' is HERE! I have been waiting for you! Let us make some MUSIC!',
+    greetMed:  (n) => 'Hey hey hey! ' + n + '! So happy to see you! Ready for some fun?',
+    greetLow:  (n) => 'Hello ' + n + '! I am so glad you are here. Ready for some gentle music?',
+    joyHigh:   (n) => 'OH WOW! Look at you ' + n + '! You are on FIRE today! Let us GOOOOO!',
+    joyMed:    (n) => 'Yaaayyy! ' + n + ' you are doing SO great! I love your energy!',
+    joyLow:    (n) => 'Beautiful, ' + n + '. You are doing so well. I am proud of you.',
+    transHigh: (n) => 'Ready ' + n + '? THREE... TWO... ONE... let us GOOOOO!',
+    transMed:  (n) => 'Okay ' + n + '! Get those ears ready... here it comes!',
+    transLow:  (n) => 'Ready ' + n + '? Something special is coming just for you...',
+    afterHigh: (n) => 'YAAAYYY! That was INCREDIBLE ' + n + '! Did you feel that energy?!',
+    afterMed:  (n) => 'Woohoo! That was SO fun ' + n + '! Want to hear another one?',
+    afterLow:  (n) => 'That was beautiful, ' + n + '. Did you like that? Ready for more?',
   },
 
   getGreeting(name, energy) {
@@ -4503,7 +4503,6 @@ async function startSession() {
   STATE.cycleLog = [];
   STATE.engScore = 0;
 
-  const startBtn = document.getElementById('startBtn');
   const stopBtn  = document.getElementById('stopBtn');
   const sessInd  = document.getElementById('sessionIndicator');
   const scanLine = document.getElementById('scanLine');
@@ -4518,9 +4517,9 @@ async function startSession() {
   
   if (vStatus) { vStatus.innerHTML = '<i class="fas fa-circle mr-1 text-green-400"></i>Live'; vStatus.className = 'text-xs font-bold px-2 py-1 rounded-full bg-green-900 text-green-300'; }
 
-  addChatBubble(\`Session started for \${STATE.selectedChild.name}! 🎉\`, 'ai');
+  addChatBubble('Session started for ' + STATE.selectedChild.name + '! 🎉', 'ai');
   
-  showToast(\`Session started! Let's play with \${STATE.selectedChild.name}! 🎵\`, '🎵', 'success');
+  showToast('Session started! Let\'s play with ' + STATE.selectedChild.name + '! 🎵', '🎵', 'success');
 
   // Greet the child
   setTimeout(() => greetChild(), 500);
