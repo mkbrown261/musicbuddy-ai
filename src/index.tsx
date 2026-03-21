@@ -2720,7 +2720,7 @@ const EXPRESSOR = {
     const name = childName || 'friend';
     const styleTemplates = {
       playful: [
-        ['Hey ' + name + ', let\'s play and sing today!', 'Clap your hands and shout hooray!'],
+        ['Hey ' + name + ', let us play and sing today!', 'Clap your hands and shout hooray!'],
         ['Jump and bounce and spin around,', 'Make the most amazing sound!'],
         ['Wiggle fingers, wiggle toes,', 'Everywhere the music goes!'],
         ['You are wonderful, ' + name + '!', 'Music fills the room today!'],
@@ -2758,7 +2758,7 @@ const EXPRESSOR = {
       const pair = templates[i % templates.length];
       lines.push(pair[0], pair[1]);
     }
-    return lines.slice(0, numLines).join('\n');
+    return lines.slice(0, numLines).join('\\n');
   },
 
   // Build timed lyric phrases for beat-synced delivery
@@ -2766,7 +2766,7 @@ const EXPRESSOR = {
     const bpm = parseInt(bpmValue) || 100;
     const beatDuration = 60 / bpm; // seconds per beat
     const phraseDuration = beatDuration * 4; // 4 beats per phrase
-    const lines = lyrics.split(/\n|\\n/).map(l => l.trim()).filter(Boolean);
+    const lines = lyrics.split(/\\n|\\\\n/).map(l => l.trim()).filter(Boolean);
 
     return lines.map((line, i) => ({
       text: line,
@@ -4519,7 +4519,7 @@ async function startSession() {
 
   addChatBubble('Session started for ' + STATE.selectedChild.name + '! 🎉', 'ai');
   
-  showToast('Session started! Let\'s play with ' + STATE.selectedChild.name + '! 🎵', '🎵', 'success');
+  showToast('Session started! Let us play with ' + STATE.selectedChild.name + '! 🎵', '🎵', 'success');
 
   // Greet the child
   setTimeout(() => greetChild(), 500);
@@ -5963,7 +5963,7 @@ async function sendCustomTTS() {
   document.getElementById('customTtsInput').value = '';
   
   if (!STATE.currentSession || !STATE.selectedChild) {
-    addChatBubble("I'm not in a session right now. Start one to play!", 'ai');
+    addChatBubble("I am not in a session right now. Start one to play!", 'ai');
     return;
   }
   
@@ -8096,7 +8096,7 @@ async function testVoice() {
   const input  = document.getElementById('voiceTestInput');
   const status = document.getElementById('voiceTestStatus');
   const btn    = document.getElementById('voiceTestBtn');
-  const text   = (input && input.value.trim()) || "Wow, let's make some amazing music together!";
+  const text   = (input && input.value.trim()) || "Wow, let us make some amazing music together!";
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Generating...'; }
   if (status) status.textContent = '⏳ Calling Groq Personality + ElevenLabs...';
   try {
@@ -8337,8 +8337,8 @@ function singLyricsWithSong(songTitle, style, durationSecs) {
   }
 
   // Split into singable lines — handle both real newlines and literal \n sequences
-  var lines = lyrics.split(/\n|\\n/).map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 2; });
-  if (lines.length === 0) lines = _defaultLyrics(style, name).split('\n');
+  var lines = lyrics.split(/\\n|\\\\n/).map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 2; });
+  if (lines.length === 0) lines = _defaultLyrics(style, name).split('\\n');
 
   // Show lyrics display
   var lyricsEl = document.getElementById('singAlongDisplay');
@@ -8388,12 +8388,12 @@ function _defaultLyrics(style, name) {
   // make TTS sound more natural. Written without backslash-escaped apostrophes
   // by using plain ASCII apostrophe (0x27) in double-quoted strings.
   var styles = {
-    playful:     "Hey " + name + ", let us play today!\nJump and dance and shout hooray!\nLa la la, come sing with me!\nWe are happy as can be!",
-    energetic:   "Go go go, feel the beat!\nStamp your feet and feel the heat!\nYou can do it, " + name + "!\nMove and groove all day!",
-    calm:        "Close your eyes, " + name + ", and breathe.\nSoft and slow, just like the leaves.\nLa la la, sweet and low.\nGentle music, soft and slow.",
-    lullaby:     "Sleep tight, sweet " + name + ", good night.\nStars are twinkling, shining bright.\nDream of songs and happy days.\nDrifting off in gentle haze.",
-    educational: "A B C, come learn with me!\nNumbers, letters, one two three!\nWe are so smart, " + name + " and me!\nLearning is fun as it can be!",
-    adventure:   name + ", let us go explore!\nEvery day there is something more!\nAdventures wait, let us sing along!\nWe are brave and happy, we are so strong!",
+    playful:     "Hey " + name + ", let us play today!\\nJump and dance and shout hooray!\\nLa la la, come sing with me!\\nWe are happy as can be!",
+    energetic:   "Go go go, feel the beat!\\nStamp your feet and feel the heat!\\nYou can do it, " + name + "!\\nMove and groove all day!",
+    calm:        "Close your eyes, " + name + ", and breathe.\\nSoft and slow, just like the leaves.\\nLa la la, sweet and low.\\nGentle music, soft and slow.",
+    lullaby:     "Sleep tight, sweet " + name + ", good night.\\nStars are twinkling, shining bright.\\nDream of songs and happy days.\\nDrifting off in gentle haze.",
+    educational: "A B C, come learn with me!\\nNumbers, letters, one two three!\\nWe are so smart, " + name + " and me!\\nLearning is fun as it can be!",
+    adventure:   name + ", let us go explore!\\nEvery day there is something more!\\nAdventures wait, let us sing along!\\nWe are brave and happy, we are so strong!",
   };
   return styles[style] || styles.playful;
 }
@@ -9555,12 +9555,12 @@ function getDemoHTML(): string {
   ];
 
   var PRESETS = [
-    { text: "Wooooah, you are SO smart! I can't believe how amazing you are!", emotion: 'excited' },
+    { text: "Wooooah, you are SO smart! I cannot believe how amazing you are!", emotion: 'excited' },
     { text: "Let's sing a happy song together! La la la, music is magic!", emotion: 'singing' },
     { text: "Hey there superstar! Are you ready to have the BEST time ever?", emotion: 'excited' },
     { text: "Time for sleepy music... close your eyes and float away on the clouds.", emotion: 'calm' },
-    { text: "You did it! I'm SO proud of you! You're a champion!", emotion: 'excited' },
-    { text: "Can you clap your hands? One, two, three — let's go!", emotion: 'friendly' },
+    { text: "You did it! I am SO proud of you! You are a champion!", emotion: 'excited' },
+    { text: "Can you clap your hands? One, two, three, let us go!", emotion: 'friendly' },
   ];
 
   var EMOTIONS = [
